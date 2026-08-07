@@ -37,4 +37,4 @@ repos:
       - id: mypy
         files: "^src/"
         # add type stubs / runtime deps needed for type checking here
-        additional_dependencies: []
+        additional_dependencies: [numpy, pydantic, zarr]

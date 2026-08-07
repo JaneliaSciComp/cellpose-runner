@@ -97,4 +97,3 @@ version from the tag, and CI creates a GitHub release.
 ```bash
 just release v0.1.0
 ```
-
