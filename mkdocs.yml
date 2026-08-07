@@ -1,0 +1,61 @@
+site_name: cellpose_runner
+site_description: Run CellPose with formalized configuration logging and visualization.
+site_url: https://JaneliaSciComp.github.io/cellpose_runner/
+repo_url: https://github.com/JaneliaSciComp/cellpose_runner
+repo_name: JaneliaSciComp/cellpose_runner
+
+nav:
+  - index.md
+
+theme:
+  name: material
+  features:
+    - navigation.indexes
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra:
+  version:
+    provider: mike
+    default: latest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - include-markdown
+  - mkdocstrings:
+      handlers:
+        python:
+          inventories:
+            - https://docs.python.org/3/objects.inv
+          options:
+            docstring_section_style: list
+            docstring_style: google
+            filters: ["!^_"]
+            heading_level: 1
+            merge_init_into_class: true
+            parameter_headings: true
+            separate_signature: true
+            show_root_heading: true
+            show_signature_annotations: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            summary: true
+  - api-autonav:
+      modules: ["src/cellpose_runner"]
