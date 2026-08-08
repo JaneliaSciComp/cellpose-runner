@@ -1,10 +1,17 @@
+import subprocess
 import tomllib
 from datetime import datetime
 
 import pytest
 
 from cellpose_runner import CellposeConfig
-from cellpose_runner._config_file import LOCK_FILENAME, _find_lock_file, write_run_config
+from cellpose_runner._config_file import (
+    LOCK_FILENAME,
+    DirtyLibraryError,
+    _find_lock_file,
+    check_library_is_committed,
+    write_run_config,
+)
 
 
 @pytest.fixture
@@ -61,3 +68,68 @@ def test_refuses_to_run_without_a_lock_file(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="uv-managed project"):
         _find_lock_file()
+
+
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-c", "user.email=t@e", "-c", "user.name=t", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture
+def checkout(tmp_path, monkeypatch):
+    """A committed repo laid out like ours, with the package root patched to it."""
+    package_root = tmp_path / "src" / "cellpose_runner"
+    package_root.mkdir(parents=True)
+    (package_root / "_run.py").write_text("x = 1\n")
+    (tmp_path / "README.md").write_text("readme\n")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "init")
+
+    monkeypatch.setattr("cellpose_runner._config_file._PACKAGE_ROOT", package_root)
+    return tmp_path, package_root
+
+
+def test_clean_checkout_passes(checkout):
+    check_library_is_committed()
+
+
+def test_modified_library_file_raises(checkout):
+    _, package_root = checkout
+    (package_root / "_run.py").write_text("x = 2\n")
+
+    with pytest.raises(DirtyLibraryError, match=r"_run\.py"):
+        check_library_is_committed()
+
+
+def test_untracked_library_file_raises(checkout):
+    # A new module the run imports is invisible to the recorded version, so it
+    # matters more than a modified one, not less.
+    _, package_root = checkout
+    (package_root / "_experiment.py").write_text("x = 3\n")
+
+    with pytest.raises(DirtyLibraryError, match=r"_experiment\.py"):
+        check_library_is_committed()
+
+
+def test_dirty_file_outside_the_package_is_ignored(checkout):
+    # Configs and scratch files are dirty almost always; blocking on them would
+    # make the check something to disable.
+    repo, _ = checkout
+    (repo / "README.md").write_text("edited\n")
+    (repo / "my_config.toml").write_text("diameter = 30\n")
+
+    check_library_is_committed()
+
+
+def test_outside_a_checkout_does_not_raise(tmp_path, monkeypatch):
+    # An installed package cannot be edited in place, and uv.lock pins it.
+    installed = tmp_path / "site-packages" / "cellpose_runner"
+    installed.mkdir(parents=True)
+    monkeypatch.setattr("cellpose_runner._config_file._PACKAGE_ROOT", installed)
+
+    check_library_is_committed()

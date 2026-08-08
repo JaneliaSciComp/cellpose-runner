@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
@@ -11,6 +12,11 @@ from cellpose_runner._config import CellposeConfig
 
 CONFIG_FILENAME = "config.toml"
 LOCK_FILENAME = "uv.lock"
+
+
+class DirtyLibraryError(RuntimeError):
+    """Raised when this package has uncommitted changes."""
+
 
 # The top-level package directory, resolved from the package rather than from
 # this module's location, so moving modules around does not shift the search
@@ -39,6 +45,41 @@ def _find_lock_file() -> Path:
         "that produced it, so cellpose_runner must be run from a uv-managed project "
         "(`uv run` / `uv sync`)."
     )
+
+
+def check_library_is_committed() -> None:
+    """Refuse to run when this package has uncommitted changes.
+
+    The recorded `cellpose_runner_version` identifies a commit, so uncommitted
+    library code makes it a lie about what segmented. Only this package's own
+    source counts -- configs, notebooks and scratch files are free to be dirty.
+
+    Does nothing when the package is not in a checkout, since an installed
+    package cannot be edited in place and `uv.lock` pins it. Likewise when git
+    is missing or hangs: stopping a segmentation for a reason unrelated to the
+    data would be worse than running.
+
+    Raises:
+        DirtyLibraryError: If this package's source has uncommitted changes.
+    """
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--", str(_PACKAGE_ROOT)],
+            cwd=_PACKAGE_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return
+    if status.returncode != 0:
+        return
+
+    if changes := status.stdout.strip():
+        raise DirtyLibraryError(
+            f"Uncommitted changes in {_PACKAGE_ROOT}:\n{changes}\n"
+            "Runs record the version that produced them, so commit before running for real."
+        )
 
 
 def _package_version() -> str | None:
