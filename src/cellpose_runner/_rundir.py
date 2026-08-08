@@ -1,5 +1,3 @@
-"""Creation of timestamped run directories."""
-
 from datetime import datetime
 from pathlib import Path
 

@@ -1,5 +1,3 @@
-"""Validated configuration for a single Cellpose run."""
-
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
