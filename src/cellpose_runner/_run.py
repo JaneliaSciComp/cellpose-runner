@@ -34,6 +34,27 @@ def smallest_label_dtype(max_label: int) -> np.dtype:
     return np.dtype(np.uint64)
 
 
+# `chunks` is a fixed target length per axis; it need not divide the array's
+# shape. `shards` only needs to be a multiple of `chunks` per axis -- zarr
+# clips both to the array's actual extent for free, so rounding a shard up to
+# the next multiple of the chunk length is enough to cover the whole array in
+# one shard, however awkward its shape.
+_TARGET_CHUNK_LENGTH = 128
+
+
+def _one_shard(shape: tuple[int, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Chunk and shard shapes covering all of `shape` in a single shard.
+
+    Each axis's chunk is `_TARGET_CHUNK_LENGTH`, capped at that axis's own
+    length in `shape` -- so a small axis (e.g. the 3-element component axis of
+    a flow array) gets one chunk covering it, rather than one padded out to
+    the target.
+    """
+    chunks = tuple(min(length, _TARGET_CHUNK_LENGTH) for length in shape)
+    shards = tuple(-(-length // chunk) * chunk for length, chunk in zip(shape, chunks, strict=True))
+    return chunks, shards
+
+
 def _build_model(config: CellposeConfig) -> Segmenter:
     from cellpose.models import CellposeModel
 
@@ -61,9 +82,14 @@ def _write_masks(run_dir: Path, masks: np.ndarray) -> np.dtype:
     # Checked before the cast: a wraparound afterwards leaves no evidence. Valid
     # as an object count only because cellpose labels consecutively from 1.
     dtype = smallest_label_dtype(int(masks.max()))
+    chunks, shards = _one_shard(masks.shape)
     zarr.create_array(
         store=run_dir / MASKS_FILENAME,
         data=masks.astype(dtype),
+        # One shard for the whole array, so a run never scatters many small
+        # chunk files across a filesystem.
+        chunks=chunks,
+        shards=shards,
         overwrite=False,
     )
     return dtype
@@ -80,7 +106,9 @@ def _write_flows(run_dir: Path, flows: list[np.ndarray]) -> None:
     """Write `flows.zarr` as a group with one array per element, named by meaning."""
     group = zarr.create_group(store=run_dir / FLOWS_FILENAME, overwrite=False)
     for name, flow in zip(_FLOW_NAMES, flows, strict=True):
-        group.create_array(name=name, data=np.asarray(flow))
+        flow = np.asarray(flow)
+        chunks, shards = _one_shard(flow.shape)
+        group.create_array(name=name, data=flow, chunks=chunks, shards=shards)
 
 
 def run(
@@ -96,7 +124,8 @@ def run(
     directory is new every time, so runs never overwrite each other.
 
     Args:
-        volume: A 2D (YX) or 3D (ZYX) array to segment.
+        volume: A 3D (YXC) or 4D (ZYXC) array to segment, channels last.
+            Single-channel data still needs the axis, e.g. `volume[..., None]`.
         config: The segmentation parameters.
         output_root: Directory to create the run directory in.
         name: Name for the run directory, in place of a generated slug.
@@ -105,12 +134,13 @@ def run(
         The label array, at the dtype it was stored as.
 
     Raises:
-        ValueError: If `volume` is not 2D or 3D.
+        ValueError: If `volume` is not 3D or 4D.
         DirtyLibraryError: If this package has uncommitted changes.
     """
-    if volume.ndim not in (2, 3):
+    if volume.ndim not in (3, 4):
         raise ValueError(
-            f"volume must be 2D (YX) or 3D (ZYX), got {volume.ndim}D with shape {volume.shape}."
+            "volume must be 3D (YXC) or 4D (ZYXC), channels last, got "
+            f"{volume.ndim}D with shape {volume.shape}."
         )
     # Both checks come before the run directory exists, so a rejected call
     # leaves nothing behind.
@@ -125,9 +155,17 @@ def run(
         input_dtype=str(volume.dtype),
     )
 
+    # channel_axis is always the fixed, last axis of our contract; z_axis is
+    # the axis before it exactly when the array carries a Z dimension. Passing
+    # both explicitly means cellpose never has to guess which axis is which
+    # from the array's shape.
+    z_axis = 0 if volume.ndim == 4 else None
+
     _reset_cellpose_logging()
     model = _build_model(config)
-    masks, flows, styles = model.eval(volume, **config.eval_kwargs())
+    masks, flows, styles = model.eval(
+        volume, channel_axis=-1, z_axis=z_axis, **config.eval_kwargs()
+    )
 
     dtype = _write_masks(run_dir, masks)
     if config.save_flows:

@@ -107,6 +107,10 @@ convention = "google"
 minversion = "7.0"
 testpaths = ["tests"]
 pythonpath = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: runs real cellpose end to end; excluded by default, run with `-m slow`",
+]
 filterwarnings = [
     "error",
     # if needed, add global ignores here, for example:
