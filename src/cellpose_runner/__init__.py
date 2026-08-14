@@ -3,10 +3,11 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ._config import CellposeConfig
+from ._run import run
 
 try:
     __version__ = version("cellpose-runner")
 except PackageNotFoundError:  # package is not installed
     __version__ = "uninstalled"
 
-__all__ = ["CellposeConfig", "__version__"]
+__all__ = ["CellposeConfig", "__version__", "run"]

@@ -122,6 +122,11 @@ disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
 
+# cellpose ships no type information, so calls into it are untyped.
+[[tool.mypy.overrides]]
+module = ["cellpose.*"]
+ignore_missing_imports = true
+
 # https://coverage.readthedocs.io/en/latest/config.html
 # These exclusions are limited to code that provably cannot run under the test
 # suite. Deliberately *not* excluded: `except ImportError` (optional-dependency
