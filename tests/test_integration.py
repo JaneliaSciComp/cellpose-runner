@@ -46,4 +46,3 @@ def test_run_segments_a_synthetic_volume(tmp_path, shape, config):
     stored = zarr.open_array(store=run_dir / MASKS_FILENAME)[:]
     assert np.array_equal(stored, masks)
     assert stored.shape == volume.shape[:-1]
-

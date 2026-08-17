@@ -12,14 +12,12 @@ from cellpose_runner._run import prepare_run, segment
 
 LOG_FILENAME = "script.log"
 
+# A dataset's volume loader: (data_loader_table) -> volume. data_loader_table
+# is the config's [data-loader] table, so a loader's own arguments -- a raw
+# file path, timepoint, channel index, whatever it needs -- live in the
+# config rather than being hardcoded or passed as CLI arguments. One config
+# file fully describes one run.
 LoadVolume = Callable[[dict], np.ndarray]
-"""A dataset's volume loader: `(data_loader_table) -> volume`.
-
-`data_loader_table` is the config's `[data-loader]` table, so a loader's own
-arguments -- a raw file path, timepoint, channel index, whatever it needs --
-live in the config rather than being hardcoded or passed as CLI arguments.
-One config file fully describes one run.
-"""
 
 
 def run_with_logging(

@@ -3,6 +3,8 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from ._config import CellposeConfig
+from ._neuroglancer import neuroglancer_url, serve_view, view
+from ._report import fileglancer_url, report
 from ._run import prepare_run, run, segment
 from ._script_support import LoadVolume, cli_main, run_with_logging
 
@@ -16,8 +18,13 @@ __all__ = [
     "LoadVolume",
     "__version__",
     "cli_main",
+    "fileglancer_url",
+    "neuroglancer_url",
     "prepare_run",
+    "report",
     "run",
     "run_with_logging",
     "segment",
+    "serve_view",
+    "view",
 ]

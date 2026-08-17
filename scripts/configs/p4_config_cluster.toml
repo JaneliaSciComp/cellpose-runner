@@ -1,8 +1,8 @@
 output_root = "/nrs/shroff/malinmayorc/cellpose_runner_test"
 
 [cellpose]
-do_3D = false
-stitch_threshold = 0.3
+do_3D = true
+anisotropy = 9.355  # Z spacing 0.5um / XY pixel size 0.0534um, raw/p4.tif
 
 [data-loader]
 raw_path = "/groups/shroff/shrofflab/xinyi/HighSNR_embryo_SLS161/for_Caroline/raw/p4.tif"

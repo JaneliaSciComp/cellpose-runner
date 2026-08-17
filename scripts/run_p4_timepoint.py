@@ -11,16 +11,20 @@ Usage:
     uv run scripts/run_p4_timepoint.py run <config.toml>
 """
 
-from pathlib import Path
-
 import numpy as np
 import tifffile
+from janelia_pathlib import JaneliaPath
 
 from cellpose_runner import cli_main
 
 
 def load_volume(data_loader: dict) -> np.ndarray:
-    raw_path = Path(data_loader["raw_path"]).expanduser()
+    # raw_path is recorded as whichever OS wrote the config (e.g. the
+    # cluster's /groups/... form); translate it to this machine's own form
+    # (e.g. /Volumes/... on a Mac) rather than assuming it's already correct.
+    raw_path = JaneliaPath(data_loader["raw_path"])
+    if not raw_path.exists():
+        raw_path.mount()
     timepoint = data_loader["timepoint"]
     nuclear_channel = data_loader["nuclear_channel"]
 

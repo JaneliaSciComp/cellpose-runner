@@ -37,4 +37,10 @@ repos:
       - id: mypy
         files: "^src/"
         # add type stubs / runtime deps needed for type checking here
-        additional_dependencies: [numpy, pydantic, zarr]
+        additional_dependencies:
+          [
+            numpy,
+            pydantic,
+            zarr,
+            "janelia-pathlib @ git+https://github.com/JaneliaSciComp/janelia-pathlib.git",
+          ]
