@@ -12,6 +12,11 @@
 # a separately tracked log path.
 set -euo pipefail
 
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <timepoint> <config.toml>" >&2
+    exit 1
+fi
+
 TIMEPOINT="$1"
 CONFIG="$2"
 
@@ -23,7 +28,7 @@ WALLTIME=1:00
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$PKG_DIR/scripts/run_p4_timepoint.py"
 
-RUN_DIR="$(uv run --project "$PKG_DIR" "$SCRIPT" prepare "$TIMEPOINT" "$CONFIG")"
+RUN_DIR="$(uv run --no-dev --project "$PKG_DIR" "$SCRIPT" prepare "$TIMEPOINT" "$CONFIG")"
 echo "run directory: $RUN_DIR"
 
 # umask 002: keep output group-writable on shared /nrs storage.
@@ -39,4 +44,4 @@ bsub \
     -W "$WALLTIME" \
     -o "$RUN_DIR/lsf.out" \
     -e "$RUN_DIR/lsf.err" \
-    "umask 002; uv run --project $PKG_DIR $SCRIPT segment $RUN_DIR $TIMEPOINT $CONFIG"
+    "umask 002; uv run --no-dev --project $PKG_DIR $SCRIPT segment $RUN_DIR $TIMEPOINT $CONFIG"

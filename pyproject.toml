@@ -30,6 +30,7 @@ dependencies = [
     "coolname>=2,<6",
     "numpy>=1.26,<3",
     "pydantic>=2.7,<3",
+    "tifffile>=2024.1,<2027",
     "tomli-w>=1,<2",
     "zarr>=3,<4",
 ]
