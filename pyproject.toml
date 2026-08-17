@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-janelia-pathlib = { git = "https://github.com/JaneliaSciComp/janelia-pathlib.git" }
+janelia-pathlib = { git = "ssh://git@github.com/JaneliaSciComp/janelia-pathlib.git" }
 
 [project.optional-dependencies]
 report = ["pandas>=2,<3", "panel>=1.4,<2"]

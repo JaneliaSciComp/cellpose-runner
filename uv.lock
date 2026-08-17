@@ -233,7 +233,7 @@ test = [
 requires-dist = [
     { name = "cellpose", specifier = ">=4.1,<5" },
     { name = "coolname", specifier = ">=2,<6" },
-    { name = "janelia-pathlib", git = "https://github.com/JaneliaSciComp/janelia-pathlib.git" },
+    { name = "janelia-pathlib", git = "ssh://git@github.com/JaneliaSciComp/janelia-pathlib.git" },
     { name = "neuroglancer", marker = "extra == 'view'", specifier = ">=2.39,<3" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "pandas", marker = "extra == 'report'", specifier = ">=2,<3" },
@@ -1088,7 +1088,7 @@ wheels = [
 [[package]]
 name = "janelia-pathlib"
 version = "0.1.0"
-source = { git = "https://github.com/JaneliaSciComp/janelia-pathlib.git#bc1ee4880d201aa8d189aab442fbadc1ee8a539e" }
+source = { git = "ssh://git@github.com/JaneliaSciComp/janelia-pathlib.git#bc1ee4880d201aa8d189aab442fbadc1ee8a539e" }
 dependencies = [
     { name = "platformdirs" },
 ]
