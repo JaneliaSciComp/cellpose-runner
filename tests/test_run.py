@@ -1,4 +1,5 @@
 import logging
+import tomllib
 
 import numpy as np
 import pytest
@@ -222,3 +223,28 @@ def test_run_is_prepare_run_then_segment(tmp_path, volume, fake_model):
     split = segment(run_dir, volume, config)
 
     assert np.array_equal(combined, split)
+
+
+def test_prepare_run_writes_extra_metadata(tmp_path, volume):
+    run_dir = prepare_run(
+        volume,
+        CellposeConfig(),
+        tmp_path,
+        extra_metadata={"data-loader": {"raw_path": "/data/p4.tif", "timepoint": 3}},
+    )
+    with (run_dir / CONFIG_FILENAME).open("rb") as f:
+        parsed = tomllib.load(f)
+    assert parsed["data-loader"] == {"raw_path": "/data/p4.tif", "timepoint": 3}
+
+
+def test_run_forwards_extra_metadata(tmp_path, volume, fake_model):
+    run(
+        volume,
+        CellposeConfig(),
+        tmp_path,
+        extra_metadata={"data-loader": {"raw_path": "/data/p4.tif"}},
+    )
+    run_dir = next(tmp_path.iterdir())
+    with (run_dir / CONFIG_FILENAME).open("rb") as f:
+        parsed = tomllib.load(f)
+    assert parsed["data-loader"] == {"raw_path": "/data/p4.tif"}

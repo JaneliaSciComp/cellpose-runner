@@ -116,6 +116,7 @@ def prepare_run(
     config: CellposeConfig,
     output_root: Path,
     name: str | None = None,
+    extra_metadata: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     """Validate `volume`, create a new run directory, and record what will run.
 
@@ -130,12 +131,16 @@ def prepare_run(
         config: The segmentation parameters.
         output_root: Directory to create the run directory in.
         name: Name for the run directory, in place of a generated slug.
+        extra_metadata: Additional tables to write into `config.toml`, keyed
+            by table name -- e.g. how the volume was loaded, or cluster job
+            metadata. See `write_run_config`.
 
     Returns:
         The new run directory, ready for `segment()`.
 
     Raises:
-        ValueError: If `volume` is not 3D or 4D.
+        ValueError: If `volume` is not 3D or 4D, or `extra_metadata` uses a
+            reserved table name.
         DirtyLibraryError: If this package has uncommitted changes.
     """
     if volume.ndim not in (3, 4):
@@ -154,6 +159,7 @@ def prepare_run(
         run_name=run_name,
         input_shape=volume.shape,
         input_dtype=str(volume.dtype),
+        extra=extra_metadata,
     )
     return run_dir
 
@@ -198,6 +204,7 @@ def run(
     config: CellposeConfig,
     output_root: Path,
     name: str | None = None,
+    extra_metadata: dict[str, dict[str, Any]] | None = None,
 ) -> np.ndarray:
     """Segment one volume into a new run directory.
 
@@ -211,6 +218,8 @@ def run(
         config: The segmentation parameters.
         output_root: Directory to create the run directory in.
         name: Name for the run directory, in place of a generated slug.
+        extra_metadata: Additional tables to write into `config.toml`. See
+            `prepare_run`.
 
     Returns:
         The label array, at the dtype it was stored as.
@@ -219,5 +228,5 @@ def run(
         ValueError: If `volume` is not 3D or 4D.
         DirtyLibraryError: If this package has uncommitted changes.
     """
-    run_dir = prepare_run(volume, config, output_root, name=name)
+    run_dir = prepare_run(volume, config, output_root, name=name, extra_metadata=extra_metadata)
     return segment(run_dir, volume, config)

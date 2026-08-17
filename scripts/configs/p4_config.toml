@@ -1,10 +1,10 @@
-output_root = "/nrs/shroff/malinmayorc/cellpose_runner_test"
+output_root = "~/experiments/HighSNR_embryo_SLS161/p4"
 
 [cellpose]
 do_3D = false
 stitch_threshold = 0.3
 
 [data-loader]
-raw_path = "/groups/shroff/shrofflab/xinyi/HighSNR_embryo_SLS161/for_Caroline/raw/p4.tif"
+raw_path = "~/data/HighSNR_embryo_SLS161/p4/raw/p4.tif"
 timepoint = 0
 nuclear_channel = 1  # 488, confirmed by eye against processed/p4-488_t1.tif

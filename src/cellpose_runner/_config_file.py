@@ -96,12 +96,16 @@ def _package_version() -> str | None:
         return None
 
 
+_RESERVED_TABLE_NAMES = frozenset({"cellpose", "run"})
+
+
 def write_run_config(
     run_dir: Path,
     config: CellposeConfig,
     run_name: str,
     input_shape: tuple[int, ...],
     input_dtype: str,
+    extra: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     """Write `config.toml` and copy `uv.lock` into `run_dir`.
 
@@ -114,14 +118,26 @@ def write_run_config(
         run_name: The run's name, as returned by `create_run_dir`.
         input_shape: Shape of the volume being segmented.
         input_dtype: Dtype of the volume being segmented.
+        extra: Additional tables to write, keyed by table name -- e.g.
+            `{"data-loader": {...}}` for how a caller loaded its volume, or
+            `{"cluster": {...}}` for job scheduler metadata. Never validated:
+            `cellpose_runner` doesn't know what a given caller's tables
+            contain, only that they belong in the run's own record of itself.
 
     Returns:
         The path to the written config file.
 
     Raises:
+        ValueError: If `extra` uses a reserved table name (`cellpose`, `run`).
         RuntimeError: If no `uv.lock` can be found, so the environment that
             produced the run could not be recorded.
     """
+    if extra and (collisions := _RESERVED_TABLE_NAMES & extra.keys()):
+        raise ValueError(
+            f"extra table name(s) {sorted(collisions)} collide with cellpose_runner's own "
+            f"{sorted(_RESERVED_TABLE_NAMES)} tables."
+        )
+
     run: dict[str, Any] = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "run_name": run_name,
@@ -140,5 +156,5 @@ def write_run_config(
 
     config_path = run_dir / CONFIG_FILENAME
     with config_path.open("wb") as f:
-        tomli_w.dump({"cellpose": cellpose, "run": run}, f)
+        tomli_w.dump({"cellpose": cellpose, "run": run, **(extra or {})}, f)
     return config_path

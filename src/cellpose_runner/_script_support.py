@@ -1,5 +1,9 @@
+import argparse
 import logging
+import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -8,8 +12,22 @@ from cellpose_runner._run import prepare_run, segment
 
 LOG_FILENAME = "script.log"
 
+LoadVolume = Callable[[dict], np.ndarray]
+"""A dataset's volume loader: `(data_loader_table) -> volume`.
 
-def run_with_logging(volume: np.ndarray, config: CellposeConfig, output_root: Path) -> np.ndarray:
+`data_loader_table` is the config's `[data-loader]` table, so a loader's own
+arguments -- a raw file path, timepoint, channel index, whatever it needs --
+live in the config rather than being hardcoded or passed as CLI arguments.
+One config file fully describes one run.
+"""
+
+
+def run_with_logging(
+    volume: np.ndarray,
+    config: CellposeConfig,
+    output_root: Path,
+    extra_metadata: dict[str, dict[str, Any]] | None = None,
+) -> np.ndarray:
     """Run `prepare_run()` then `segment()`, logging into the run directory.
 
     Convenience for one-off scripts: logging setup is the same regardless of
@@ -19,11 +37,13 @@ def run_with_logging(volume: np.ndarray, config: CellposeConfig, output_root: Pa
         volume: A 3D (YXC) or 4D (ZYXC) array to segment, channels last.
         config: The segmentation parameters.
         output_root: Directory to create the run directory in.
+        extra_metadata: Additional tables to write into `config.toml`. See
+            `cellpose_runner.prepare_run`.
 
     Returns:
         The label array, as returned by `segment()`.
     """
-    run_dir = prepare_run(volume, config, output_root)
+    run_dir = prepare_run(volume, config, output_root, extra_metadata=extra_metadata)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -38,3 +58,79 @@ def run_with_logging(volume: np.ndarray, config: CellposeConfig, output_root: Pa
     masks = segment(run_dir, volume, config)
     logger.info("segmented %s, %d labels", masks.shape, masks.max())
     return masks
+
+
+def _read_config(config_path: Path) -> tuple[CellposeConfig, dict, Path]:
+    with config_path.open("rb") as f:
+        toml = tomllib.load(f)
+    config = CellposeConfig(**toml["cellpose"])
+    output_root = Path(toml["output_root"]).expanduser()
+    return config, toml["data-loader"], output_root
+
+
+def cli_main(load_volume: LoadVolume) -> None:
+    """A generic `prepare` / `segment` / `run` CLI for a one-off script.
+
+    Everything here is dataset-agnostic except `load_volume`: a script writes
+    that one function -- `(data_loader_table) -> volume` -- reading whatever
+    it needs (a raw path, timepoint, channel index) from the config's
+    `[data-loader]` table, and gets the rest (argument parsing, config
+    loading, logging, calling into `cellpose_runner`) for free. One config
+    file fully describes one run, so nothing besides the config path is a CLI
+    argument.
+
+    The config also needs a top-level `output_root`, since it's needed
+    regardless of how the volume is loaded and isn't a loader argument.
+
+    Split into `prepare` and `segment` so a caller (e.g. a cluster submission
+    script) can create the run directory -- and know its path, to point LSF's
+    own logs at it -- before the GPU job that does the actual segmentation
+    starts. `run` does both in one call, for the common local case.
+
+    Args:
+        load_volume: Loads a volume from the config's `[data-loader]` table.
+    """
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(required=True)
+
+    prepare_parser = subparsers.add_parser("prepare")
+    prepare_parser.add_argument("config_path", type=Path)
+
+    segment_parser = subparsers.add_parser("segment")
+    segment_parser.add_argument("run_dir", type=Path)
+    segment_parser.add_argument("config_path", type=Path)
+
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("config_path", type=Path)
+
+    prepare_parser.set_defaults(command="prepare")
+    segment_parser.set_defaults(command="segment")
+    run_parser.set_defaults(command="run")
+
+    args = parser.parse_args()
+    config, data_loader, output_root = _read_config(args.config_path)
+    volume = load_volume(data_loader)
+
+    # [data-loader] is recorded in config.toml, alongside [cellpose]/[run] --
+    # so a run directory says which raw path/timepoint/channel produced it,
+    # not just which cellpose config ran.
+    extra_metadata = {"data-loader": data_loader}
+
+    if args.command == "prepare":
+        run_dir = prepare_run(volume, config, output_root, extra_metadata=extra_metadata)
+        print(run_dir)  # noqa: T201 -- the one line a caller needs to capture
+    elif args.command == "segment":
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(name)s %(message)s",
+            handlers=[
+                logging.StreamHandler(),
+                logging.FileHandler(args.run_dir / LOG_FILENAME),
+            ],
+        )
+        logger = logging.getLogger(__name__)
+        logger.info("running cellpose on volume %s %s", volume.shape, volume.dtype)
+        masks = segment(args.run_dir, volume, config)
+        logger.info("segmented %s, %d labels", masks.shape, masks.max())
+    else:
+        run_with_logging(volume, config, output_root, extra_metadata=extra_metadata)

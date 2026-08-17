@@ -61,6 +61,55 @@ def test_lock_file_is_copied(written):
     assert (run_dir / LOCK_FILENAME).read_bytes() == _find_lock_file().read_bytes()
 
 
+def test_extra_tables_are_written(tmp_path):
+    config_path = write_run_config(
+        tmp_path,
+        CellposeConfig(),
+        run_name="agile-seahorse",
+        input_shape=(8, 64, 64),
+        input_dtype="uint16",
+        extra={"data-loader": {"raw_path": "/data/p4.tif", "timepoint": 3}},
+    )
+    with config_path.open("rb") as f:
+        parsed = tomllib.load(f)
+    assert parsed["data-loader"] == {"raw_path": "/data/p4.tif", "timepoint": 3}
+
+
+def test_multiple_extra_tables_coexist(tmp_path):
+    config_path = write_run_config(
+        tmp_path,
+        CellposeConfig(),
+        run_name="agile-seahorse",
+        input_shape=(8, 64, 64),
+        input_dtype="uint16",
+        extra={"data-loader": {"raw_path": "/data/p4.tif"}, "cluster": {"queue": "gpu_l4"}},
+    )
+    with config_path.open("rb") as f:
+        parsed = tomllib.load(f)
+    assert parsed["data-loader"] == {"raw_path": "/data/p4.tif"}
+    assert parsed["cluster"] == {"queue": "gpu_l4"}
+
+
+def test_extra_none_leaves_config_toml_unchanged(written):
+    # extra=None (the default, used by the written fixture) must not add any
+    # tables beyond cellpose/run -- existing callers see no change.
+    _, parsed = written
+    assert set(parsed) == {"cellpose", "run"}
+
+
+@pytest.mark.parametrize("reserved", ["cellpose", "run"])
+def test_extra_rejects_reserved_table_names(tmp_path, reserved):
+    with pytest.raises(ValueError, match=reserved):
+        write_run_config(
+            tmp_path,
+            CellposeConfig(),
+            run_name="agile-seahorse",
+            input_shape=(8, 64, 64),
+            input_dtype="uint16",
+            extra={reserved: {"oops": True}},
+        )
+
+
 def test_refuses_to_run_without_a_lock_file(tmp_path, monkeypatch):
     # Outside a uv-managed project there is no lock to describe the environment,
     # so the run would be quietly unreproducible.

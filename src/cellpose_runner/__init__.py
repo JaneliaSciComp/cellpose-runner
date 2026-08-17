@@ -4,7 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._config import CellposeConfig
 from ._run import prepare_run, run, segment
-from ._script_support import run_with_logging
+from ._script_support import LoadVolume, cli_main, run_with_logging
 
 try:
     __version__ = version("cellpose-runner")
@@ -13,7 +13,9 @@ except PackageNotFoundError:  # package is not installed
 
 __all__ = [
     "CellposeConfig",
+    "LoadVolume",
     "__version__",
+    "cli_main",
     "prepare_run",
     "run",
     "run_with_logging",

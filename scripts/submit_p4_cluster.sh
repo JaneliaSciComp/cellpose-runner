@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Submit one cellpose_runner segmentation for a p4 timepoint as an LSF job.
 #
-# Usage: scripts/submit_p4_cluster.sh <timepoint> <config.toml>
+# Usage: scripts/submit_p4_cluster.sh <config.toml>
 #
 # One bsub job, no array, no sweep -- validates the cluster path for a single
 # run before anything more ambitious. See scratch/CLUSTER_DESIGN.md.
@@ -12,13 +12,12 @@
 # a separately tracked log path.
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <timepoint> <config.toml>" >&2
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <config.toml>" >&2
     exit 1
 fi
 
-TIMEPOINT="$1"
-CONFIG="$2"
+CONFIG="$1"
 
 PROJECT=shroff        # LSF billing project
 QUEUE=gpu_short        # 1-hour cap, any GPU type -- for this validation run
@@ -28,7 +27,7 @@ WALLTIME=1:00
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$PKG_DIR/scripts/run_p4_timepoint.py"
 
-RUN_DIR="$(uv run --no-dev --project "$PKG_DIR" "$SCRIPT" prepare "$TIMEPOINT" "$CONFIG")"
+RUN_DIR="$(uv run --no-dev --project "$PKG_DIR" "$SCRIPT" prepare "$CONFIG")"
 echo "run directory: $RUN_DIR"
 
 # umask 002: keep output group-writable on shared /nrs storage.
@@ -36,7 +35,7 @@ echo "run directory: $RUN_DIR"
 # so passing rusage alongside it is redundant, and multiplies under
 # RESOURCE_RESERVE_PER_SLOT=Y. See scratch/CLUSTER_DESIGN.md.
 bsub \
-    -J "cellpose-runner-p4-t${TIMEPOINT}" \
+    -J "cellpose-runner-$(basename "$RUN_DIR")" \
     -n "$SLOTS" \
     -gpu "num=1" \
     -q "$QUEUE" \
@@ -44,4 +43,4 @@ bsub \
     -W "$WALLTIME" \
     -o "$RUN_DIR/lsf.out" \
     -e "$RUN_DIR/lsf.err" \
-    "umask 002; uv run --no-dev --project $PKG_DIR $SCRIPT segment $RUN_DIR $TIMEPOINT $CONFIG"
+    "umask 002; uv run --no-dev --project $PKG_DIR $SCRIPT segment $RUN_DIR $CONFIG"
