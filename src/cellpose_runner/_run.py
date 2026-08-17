@@ -111,17 +111,18 @@ def _write_flows(run_dir: Path, flows: list[np.ndarray]) -> None:
         group.create_array(name=name, data=flow, chunks=chunks, shards=shards)
 
 
-def run(
+def prepare_run(
     volume: np.ndarray,
     config: CellposeConfig,
     output_root: Path,
     name: str | None = None,
-) -> np.ndarray:
-    """Segment one volume into a new run directory.
+) -> Path:
+    """Validate `volume`, create a new run directory, and record what will run.
 
-    Writes `config.toml`, a copy of `uv.lock` and `masks.zarr`, plus
-    `flows.zarr` and `styles.npy` if the config asks for them. The run
-    directory is new every time, so runs never overwrite each other.
+    Writes `config.toml` and a copy of `uv.lock` before anything touches the
+    GPU, so a crashed `segment()` call is still identifiable. Split from
+    `segment()` so a caller can learn the run directory -- to log into it, for
+    instance -- before segmentation starts.
 
     Args:
         volume: A 3D (YXC) or 4D (ZYXC) array to segment, channels last.
@@ -131,7 +132,7 @@ def run(
         name: Name for the run directory, in place of a generated slug.
 
     Returns:
-        The label array, at the dtype it was stored as.
+        The new run directory, ready for `segment()`.
 
     Raises:
         ValueError: If `volume` is not 3D or 4D.
@@ -154,7 +155,23 @@ def run(
         input_shape=volume.shape,
         input_dtype=str(volume.dtype),
     )
+    return run_dir
 
+
+def segment(run_dir: Path, volume: np.ndarray, config: CellposeConfig) -> np.ndarray:
+    """Segment `volume` and write its outputs into `run_dir`.
+
+    Writes `masks.zarr`, plus `flows.zarr` and `styles.npy` if the config asks
+    for them. Call `prepare_run()` first to get `run_dir`.
+
+    Args:
+        run_dir: A run directory, as returned by `prepare_run()`.
+        volume: The same array passed to `prepare_run()`.
+        config: The same config passed to `prepare_run()`.
+
+    Returns:
+        The label array, at the dtype it was stored as.
+    """
     # channel_axis is always the fixed, last axis of our contract; z_axis is
     # the axis before it exactly when the array carries a Z dimension. Passing
     # both explicitly means cellpose never has to guess which axis is which
@@ -174,3 +191,33 @@ def run(
         np.save(run_dir / STYLES_FILENAME, styles)
 
     return masks.astype(dtype)
+
+
+def run(
+    volume: np.ndarray,
+    config: CellposeConfig,
+    output_root: Path,
+    name: str | None = None,
+) -> np.ndarray:
+    """Segment one volume into a new run directory.
+
+    Equivalent to `prepare_run()` followed by `segment()`, for the common case
+    where the run directory itself isn't needed until after segmentation. The
+    run directory is new every time, so runs never overwrite each other.
+
+    Args:
+        volume: A 3D (YXC) or 4D (ZYXC) array to segment, channels last.
+            Single-channel data still needs the axis, e.g. `volume[..., None]`.
+        config: The segmentation parameters.
+        output_root: Directory to create the run directory in.
+        name: Name for the run directory, in place of a generated slug.
+
+    Returns:
+        The label array, at the dtype it was stored as.
+
+    Raises:
+        ValueError: If `volume` is not 3D or 4D.
+        DirtyLibraryError: If this package has uncommitted changes.
+    """
+    run_dir = prepare_run(volume, config, output_root, name=name)
+    return segment(run_dir, volume, config)

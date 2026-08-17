@@ -11,7 +11,9 @@ from cellpose_runner._run import (
     MASKS_FILENAME,
     STYLES_FILENAME,
     _one_shard,
+    prepare_run,
     run,
+    segment,
     smallest_label_dtype,
 )
 
@@ -193,3 +195,30 @@ def test_each_run_gets_its_own_directory(tmp_path, volume, fake_model):
     for _ in range(2):
         run(volume, CellposeConfig(), tmp_path)
     assert len(list(tmp_path.iterdir())) == 2
+
+
+def test_prepare_run_returns_the_run_directory_before_segmenting(tmp_path, volume):
+    run_dir = prepare_run(volume, CellposeConfig(), tmp_path)
+    assert run_dir.is_dir()
+    assert (run_dir / CONFIG_FILENAME).is_file()
+    assert not (run_dir / MASKS_FILENAME).exists()
+
+
+def test_segment_writes_into_a_prepared_run_directory(tmp_path, volume, fake_model):
+    config = CellposeConfig()
+    run_dir = prepare_run(volume, config, tmp_path)
+    masks = segment(run_dir, volume, config)
+
+    stored = zarr.open_array(store=run_dir / MASKS_FILENAME)[:]
+    assert np.array_equal(stored, masks)
+
+
+def test_run_is_prepare_run_then_segment(tmp_path, volume, fake_model):
+    config = CellposeConfig()
+    combined = run(volume, config, tmp_path)
+
+    fake_model.eval_kwargs = None
+    run_dir = prepare_run(volume, config, tmp_path, name="split")
+    split = segment(run_dir, volume, config)
+
+    assert np.array_equal(combined, split)
