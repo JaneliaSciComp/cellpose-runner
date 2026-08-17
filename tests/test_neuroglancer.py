@@ -124,7 +124,9 @@ def test_neuroglancer_url_builds_a_link():
     pytest.importorskip("neuroglancer")
     from cellpose_runner import neuroglancer_url
 
-    url = neuroglancer_url("https://fileglancer.example.org/raw", "https://fileglancer.example.org/masks")
+    url = neuroglancer_url(
+        "https://fileglancer.example.org/raw", "https://fileglancer.example.org/masks"
+    )
     assert url.startswith("https://neuroglancer-demo.appspot.com/")
 
 

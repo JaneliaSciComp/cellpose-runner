@@ -123,9 +123,7 @@ def view(
     if not raw_fileglancer_url:
         raw_fileglancer_url = input(f"Fileglancer URL for the raw image behind {run_dir}: ")
 
-    runs_root_fileglancer_url = runs_root_fileglancer_url or viewer.get(
-        "runs_root_fileglancer_url"
-    )
+    runs_root_fileglancer_url = runs_root_fileglancer_url or viewer.get("runs_root_fileglancer_url")
     if not runs_root_fileglancer_url:
         runs_root_fileglancer_url = input(f"Fileglancer URL for {run_dir.parent}: ")
 

@@ -62,9 +62,7 @@ def test_row_uses_a_fileglancer_link_when_given_a_base_url(tmp_path):
 
     row = _row(run_dir, tmp_path, fileglancer_base_url="https://fileglancer.example.org/runs")
 
-    assert row["path"] == fileglancer_url(
-        "https://fileglancer.example.org/runs", run_dir, tmp_path
-    )
+    assert row["path"] == fileglancer_url("https://fileglancer.example.org/runs", run_dir, tmp_path)
 
 
 def test_report_writes_an_html_file(tmp_path):

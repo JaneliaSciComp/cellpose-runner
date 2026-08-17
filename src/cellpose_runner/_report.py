@@ -54,9 +54,7 @@ def _row(run_dir: Path, runs_root: Path, fileglancer_base_url: str | None) -> di
     }
 
 
-def report(
-    runs_root: Path, output_path: Path, fileglancer_base_url: str | None = None
-) -> Path:
+def report(runs_root: Path, output_path: Path, fileglancer_base_url: str | None = None) -> Path:
     """Write a self-contained, sortable HTML table of every run under `runs_root`.
 
     One row per run directory (`<runs_root>/*/config.toml`). Rendered with
@@ -78,13 +76,11 @@ def report(
         `output_path`.
     """
     import pandas as pd
-    import panel as pn
+    import panel
 
-    pn.extension("tabulator")
+    panel.extension("tabulator")
 
-    rows = [
-        _row(run_dir, runs_root, fileglancer_base_url) for run_dir in _discover_runs(runs_root)
-    ]
+    rows = [_row(run_dir, runs_root, fileglancer_base_url) for run_dir in _discover_runs(runs_root)]
     # Column order: run_name first, whatever [run]/[cellpose] fields any row
     # has in between (a run's own recorded metadata and resolved config,
     # which may vary as either gains fields over time), status/path last.
@@ -95,6 +91,6 @@ def report(
     )
     df = pd.DataFrame(rows, columns=[*_LEADING_COLUMNS, *middle_columns, *_TRAILING_COLUMNS])
 
-    table = pn.widgets.Tabulator(df, show_index=False, disabled=True, pagination=None)
-    pn.Column(f"# cellpose_runner runs: {runs_root}", table).save(output_path, embed=True)
+    table = panel.widgets.Tabulator(df, show_index=False, disabled=True, pagination=None)
+    panel.Column(f"# cellpose_runner runs: {runs_root}", table).save(output_path, embed=True)
     return output_path
