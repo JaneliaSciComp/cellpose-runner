@@ -10,7 +10,7 @@ from janelia_pathlib import JaneliaPath
 
 from cellpose_runner._config_file import CONFIG_FILENAME
 from cellpose_runner._report import fileglancer_url
-from cellpose_runner._run import MASKS_FILENAME
+from cellpose_runner._run import FLOWS_FILENAME, MASKS_FILENAME
 
 if TYPE_CHECKING:
     from cellpose_runner._script_support import LoadVolume
@@ -186,11 +186,19 @@ def serve_view(run_dir: Path, load_volume: "LoadVolume") -> str:
     volume = load_volume(toml["data-loader"])
     masks = np.asarray(zarr.open_array(store=run_dir / MASKS_FILENAME)[:])
 
+    if save_flows := toml["cellpose"]["save_flows"]:
+        cellprob = np.asarray(zarr.open_array(store=run_dir / FLOWS_FILENAME / "cellprob")[:])
+
     viewer = neuroglancer.Viewer()
     with viewer.txn() as state:
         state.layers["image"] = neuroglancer.ImageLayer(
             source=neuroglancer.LocalVolume(data=_to_xyz(volume, has_channel_axis=True))
         )
+        if save_flows:
+            state.layers["cellprob"] = neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(data=_to_xyz(cellprob, has_channel_axis=False))
+            )
+
         state.layers["masks"] = neuroglancer.SegmentationLayer(
             source=neuroglancer.LocalVolume(
                 data=_to_xyz(masks, has_channel_axis=False), volume_type="segmentation"
