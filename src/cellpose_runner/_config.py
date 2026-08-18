@@ -29,6 +29,9 @@ class CellposeConfig(BaseModel):
     stitch_threshold: float = 0.0
     flow_threshold: float = 0.4
     cellprob_threshold: float = 0.0
+    # Gaussian sigma smoothing the 3D flow field before masks are followed
+    # from it. 0 (cellpose's default) is no smoothing.
+    flow3D_smooth: float = 0.0
     normalize: bool = True
     anisotropy: float | None = None
     min_size: int = 15

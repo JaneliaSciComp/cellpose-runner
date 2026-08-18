@@ -18,6 +18,19 @@ from janelia_pathlib import JaneliaPath
 from cellpose_runner import cli_main
 
 
+def _center_third(volume: np.ndarray) -> np.ndarray:
+    """The middle third of `volume` along each of Z, Y and X.
+
+    A do_3D run over the full 73x1280x1280 volume takes hours, which is too
+    slow to sweep parameters against. The embryo occupies a small part of the
+    field of view, so a center crop keeps plenty of nuclei to judge a
+    parameter set by while cutting the work by ~27x. Edges of the embryo do get
+    cut off -- fine for comparing parameters, not for a final segmentation.
+    """
+    slices = tuple(slice(length // 3, 2 * (length // 3)) for length in volume.shape)
+    return volume[slices]
+
+
 def load_volume(data_loader: dict) -> np.ndarray:
     # raw_path is recorded as whichever OS wrote the config (e.g. the
     # cluster's /groups/... form); translate it to this machine's own form
@@ -34,6 +47,11 @@ def load_volume(data_loader: dict) -> np.ndarray:
     # (as in `prepare`) -- no pixel data is read until the array is used.
     mapped = tifffile.memmap(raw_path)
     volume = mapped[timepoint, :, nuclear_channel].astype(mapped.dtype.newbyteorder("="))
+
+    # Defaults to the full volume, so an existing config without this key
+    # keeps segmenting what it always did.
+    if data_loader.get("center_third", False):
+        volume = _center_third(volume)
     return volume[..., None]  # ZYX -> ZYXC, single channel
 
 
