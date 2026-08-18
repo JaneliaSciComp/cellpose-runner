@@ -1,4 +1,5 @@
-output_root = "/nrs/shroff/malinmayorc/cellpose_runner_test"
+output_root = "/nrs/shroff/malinmayorc/cellpose/SLS161"
+lsf_project = "shroff"  # LSF billing project for scripts/submit_p4_cluster.sh
 
 [cellpose]
 do_3D = true

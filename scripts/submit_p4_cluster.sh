@@ -19,13 +19,21 @@ fi
 
 CONFIG="$1"
 
-PROJECT=shroff  # LSF billing project
 QUEUE=gpu_l4    # no wall-time cap; cheapest uncapped GPU queue -- do_3D=True runs exceed gpu_short's 1hr cap
 SLOTS=8         # gpu_l4 is 15GB/slot; observed local peak RSS is ~8GB, well under
 WALLTIME=4:00
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$PKG_DIR/scripts/run_p4_timepoint.py"
+
+# lsf_project lives in the config (top-level, alongside output_root) rather
+# than being hardcoded here, since the billing project is a property of the
+# dataset/run, not of this script.
+PROJECT="$(uv run --no-dev --project "$PKG_DIR" python3 -c "
+import tomllib, sys
+with open(sys.argv[1], 'rb') as f:
+    print(tomllib.load(f)['lsf_project'])
+" "$CONFIG")"
 
 RUN_DIR="$(uv run --no-dev --project "$PKG_DIR" "$SCRIPT" prepare "$CONFIG")"
 echo "run directory: $RUN_DIR"
