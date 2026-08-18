@@ -1,8 +1,8 @@
 import inspect
 
-from cellpose.models import CellposeModel
+from cellpose.models import CellposeModel, normalize_default
 
-from cellpose_runner import CellposeConfig
+from cellpose_runner import CellposeConfig, NormalizeConfig
 from cellpose_runner._config import _MODEL_FIELDS, _OUTPUT_FIELDS
 
 
@@ -16,6 +16,36 @@ def test_eval_kwargs_covers_every_remaining_field():
 def test_eval_kwargs_are_accepted_by_cellpose():
     accepted = set(inspect.signature(CellposeModel.eval).parameters)
     assert CellposeConfig().eval_kwargs().keys() <= accepted
+
+
+def test_normalize_off_passes_false_not_a_dict():
+    # The dict form always implies normalization is on, so "off" has to be the
+    # bool -- a dict with normalize=False stripped would silently turn it on.
+    config = CellposeConfig(normalize=NormalizeConfig(normalize=False))
+    assert config.eval_kwargs()["normalize"] is False
+
+
+def test_normalize_passes_every_field_including_defaults():
+    # Runs pin their environment, so the eval call is fully determined by the
+    # config rather than partly by whatever cellpose currently defaults to.
+    normalize = CellposeConfig(normalize=NormalizeConfig(smooth_radius=3.0)).eval_kwargs()[
+        "normalize"
+    ]
+    assert normalize["smooth_radius"] == 3.0
+    # `normalize` itself is the on/off switch, expressed by the dict's presence.
+    assert normalize.keys() == set(NormalizeConfig.model_fields) - {"normalize"}
+
+
+def test_normalize_matches_cellpose_defaults():
+    # NormalizeConfig restates cellpose's normalize_default so it can be passed
+    # through untranslated. Names AND values are compared, because passing every
+    # field means a changed upstream default silently changes what runs do --
+    # this test is what turns that into a visible failure.
+    ours = {name: field.default for name, field in NormalizeConfig.model_fields.items()}
+    theirs = dict(normalize_default)
+    # cellpose spells these as lists; tuples are the immutable equivalent.
+    ours = {k: list(v) if isinstance(v, tuple) else v for k, v in ours.items()}
+    assert ours == theirs
 
 
 def test_model_kwargs_are_accepted_by_cellpose():

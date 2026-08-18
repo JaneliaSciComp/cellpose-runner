@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from ._config import CellposeConfig
+from ._config import CellposeConfig, NormalizeConfig
 from ._neuroglancer import neuroglancer_url, serve_view, view
 from ._report import fileglancer_url, report
 from ._run import prepare_run, run, segment
@@ -16,6 +16,7 @@ except PackageNotFoundError:  # package is not installed
 __all__ = [
     "CellposeConfig",
     "LoadVolume",
+    "NormalizeConfig",
     "__version__",
     "cli_main",
     "fileglancer_url",

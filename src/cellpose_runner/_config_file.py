@@ -99,6 +99,20 @@ def _package_version() -> str | None:
 _RESERVED_TABLE_NAMES = frozenset({"cellpose", "run"})
 
 
+def _without_nones(value: dict[str, Any]) -> dict[str, Any]:
+    """Drop `None` values, including inside nested tables.
+
+    TOML cannot represent null, so an unset field is omitted rather than
+    recorded as empty; reading the file back restores the same default. Nested
+    because sub-configs like `normalize` have optional fields of their own.
+    """
+    return {
+        k: _without_nones(v) if isinstance(v, dict) else v
+        for k, v in value.items()
+        if v is not None
+    }
+
+
 def write_run_config(
     run_dir: Path,
     config: CellposeConfig,
@@ -152,7 +166,7 @@ def write_run_config(
 
     shutil.copy(_find_lock_file(), run_dir / LOCK_FILENAME)
 
-    cellpose = {k: v for k, v in config.model_dump().items() if v is not None}
+    cellpose = _without_nones(config.model_dump())
 
     config_path = run_dir / CONFIG_FILENAME
     with config_path.open("wb") as f:
