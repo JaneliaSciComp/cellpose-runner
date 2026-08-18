@@ -33,6 +33,14 @@ upgrade:
 upgrade-package package:
     uv lock --upgrade-package {{ package }}
 
+# serve a live, sortable report of every run, e.g. `just report scripts/configs/p4_config.toml`
+report config:
+    uv run --extra report panel serve scripts/open_report.py --show --args {{ config }}
+
+# view one p4 run's raw volume + masks in neuroglancer, e.g. `just view-p4 scripts/configs/p4_config.toml beneficial-dragon`
+view-p4 config slug:
+    uv run --extra view scripts/serve_p4_view.py {{ config }} {{ slug }}
+
 # build wheel and sdist
 build:
     uv build

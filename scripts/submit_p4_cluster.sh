@@ -19,10 +19,10 @@ fi
 
 CONFIG="$1"
 
-PROJECT=shroff        # LSF billing project
-QUEUE=gpu_short        # 1-hour cap, any GPU type -- for this validation run
-SLOTS=8                # gpu_short is 15GB/slot; observed local peak RSS is ~8GB, well under
-WALLTIME=1:00
+PROJECT=shroff  # LSF billing project
+QUEUE=gpu_l4    # no wall-time cap; cheapest uncapped GPU queue -- do_3D=True runs exceed gpu_short's 1hr cap
+SLOTS=8         # gpu_l4 is 15GB/slot; observed local peak RSS is ~8GB, well under
+WALLTIME=4:00
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$PKG_DIR/scripts/run_p4_timepoint.py"
