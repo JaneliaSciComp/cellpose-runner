@@ -68,11 +68,11 @@ def _read_config(config_path: Path) -> tuple[CellposeConfig, dict, Path]:
 
 
 def resolve_run_dir(config_path: Path, slug: str) -> Path:
-    """The run directory named `*_<slug>` under `config_path`'s `output_root`.
+    """The run directory named `<slug>_*` under `config_path`'s `output_root`.
 
     Typing a timestamp is tedious and easy to fumble, so a caller only needs
     the slug (e.g. "beneficial-dragon") and the config that named its output
-    root -- not the full `<timestamp>_<slug>` directory name. Dataset-agnostic:
+    root -- not the full `<slug>_<timestamp>` directory name. Dataset-agnostic:
     only reads `output_root`, not `[data-loader]`.
 
     Args:
@@ -95,10 +95,10 @@ def resolve_run_dir(config_path: Path, slug: str) -> Path:
         output_root.mount()
     output_root = cast("Path", output_root)
 
-    matches = list(output_root.glob(f"*_{slug}"))
+    matches = list(output_root.glob(f"{slug}_*"))
     if len(matches) != 1:
         raise ValueError(
-            f"expected exactly one run matching *_{slug} under {output_root}, found {matches}"
+            f"expected exactly one run matching {slug}_* under {output_root}, found {matches}"
         )
     return matches[0]
 

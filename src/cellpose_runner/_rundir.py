@@ -31,6 +31,6 @@ def create_run_dir(output_root: Path, name: str | None = None) -> tuple[Path, st
 
     run_name = name or generate_slug(2)
     timestamp = datetime.now().strftime(_TIMESTAMP_FORMAT)
-    run_dir = output_root / f"{timestamp}_{run_name}"
+    run_dir = output_root / f"{run_name}_{timestamp}"
     run_dir.mkdir()
     return run_dir, run_name
