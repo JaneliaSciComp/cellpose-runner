@@ -32,6 +32,25 @@ def _center_third(volume: np.ndarray) -> np.ndarray:
 
 
 def load_volume(data_loader: dict) -> np.ndarray:
+    if "timepoint" in data_loader:
+        return load_volume_raw(data_loader)
+    else:
+        return load_volume_processed(data_loader)
+
+
+def load_volume_processed(data_loader: dict) -> np.ndarray:
+    raw_path = JaneliaPath(data_loader["raw_path"])
+    mapped = tifffile.memmap(raw_path)
+    volume = mapped[:].astype(mapped.dtype.newbyteorder("="))
+
+    # Defaults to the full volume, so an existing config without this key
+    # keeps segmenting what it always did.
+    if data_loader.get("center_third", False):
+        volume = _center_third(volume)
+    return volume[..., None]  # ZYX -> ZYXC, single channel
+
+
+def load_volume_raw(data_loader: dict) -> np.ndarray:
     # raw_path is recorded as whichever OS wrote the config (e.g. the
     # cluster's /groups/... form); translate it to this machine's own form
     # (e.g. /Volumes/... on a Mac) rather than assuming it's already correct.

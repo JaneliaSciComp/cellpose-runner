@@ -1,0 +1,15 @@
+output_root = "/nrs/shroff/malinmayorc/cellpose/SLS161"
+lsf_project = "shroff"  # LSF billing project for scripts/submit_p4_cluster.sh
+
+[cellpose]
+do_3D = true
+anisotropy = 9.355  # Z spacing 0.5um / XY pixel size 0.0534um, raw/p4.tif
+flow_threshold = 0.4
+cellprob_threshold = 0.0
+flow3D_smooth = 1.0  # Gaussian sigma on the 3D flow field; 0 is no smoothing
+min_size = 15
+save_flows = true  # cellprob/dP, to tell "missed nuclei" apart from "flows lost the mask"
+
+[data-loader]
+raw_path = "/groups/shroff/shrofflab/xinyi/HighSNR_embryo_SLS161/for_Caroline/processed/p4-488/t1.tif"
+center_third = true  # ~27x less work for a parameter sweep; edges of the embryo are cut off
