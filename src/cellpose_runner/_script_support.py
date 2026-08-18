@@ -95,10 +95,11 @@ def resolve_run_dir(config_path: Path, slug: str) -> Path:
         output_root.mount()
     output_root = cast("Path", output_root)
 
-    matches = list(output_root.glob(f"{slug}_*"))
+    matches = list(output_root.glob(f"{slug}_*")) + list(output_root.glob(f"*_{slug}"))
     if len(matches) != 1:
         raise ValueError(
-            f"expected exactly one run matching {slug}_* under {output_root}, found {matches}"
+            f"expected exactly one run matching {slug}_* or *_{slug} under {output_root}, "
+            f"found {matches}"
         )
     return matches[0]
 
