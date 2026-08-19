@@ -13,9 +13,8 @@ import sys
 import tomllib
 from pathlib import Path
 
-from janelia_pathlib import JaneliaPath
-
 from cellpose_runner import report
+from cellpose_runner._paths import resolve_janelia_path
 
 
 def _runs_root(arg: Path) -> Path:
@@ -27,10 +26,7 @@ def _runs_root(arg: Path) -> Path:
 
     # output_root may be recorded in whichever OS wrote the config (e.g. the
     # cluster's /nrs/... form); translate/mount it for this machine.
-    resolved = JaneliaPath(runs_root)
-    if not resolved.exists():
-        resolved.mount()
-    return resolved
+    return resolve_janelia_path(runs_root)
 
 
 report(_runs_root(Path(sys.argv[1])))

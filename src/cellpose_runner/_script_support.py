@@ -3,12 +3,12 @@ import logging
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
-from janelia_pathlib import JaneliaPath
 
 from cellpose_runner._config import CellposeConfig
+from cellpose_runner._paths import resolve_janelia_path
 from cellpose_runner._run import prepare_run, segment
 
 LOG_FILENAME = "script.log"
@@ -90,10 +90,7 @@ def resolve_run_dir(config_path: Path, slug: str) -> Path:
     with config_path.open("rb") as f:
         # output_root may be recorded in whichever OS wrote the config (e.g.
         # the cluster's /nrs/... form); translate/mount it for this machine.
-        output_root = JaneliaPath(tomllib.load(f)["output_root"])
-    if not output_root.exists():
-        output_root.mount()
-    output_root = cast("Path", output_root)
+        output_root = resolve_janelia_path(Path(tomllib.load(f)["output_root"]))
 
     matches = list(output_root.glob(f"{slug}_*")) + list(output_root.glob(f"*_{slug}"))
     if len(matches) != 1:

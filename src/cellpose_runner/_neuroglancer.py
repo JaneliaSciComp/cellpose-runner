@@ -6,9 +6,9 @@ from urllib.parse import quote
 
 import numpy as np
 import tomli_w
-from janelia_pathlib import JaneliaPath
 
 from cellpose_runner._config_file import CONFIG_FILENAME
+from cellpose_runner._paths import resolve_janelia_path
 from cellpose_runner._report import fileglancer_url
 from cellpose_runner._run import FLOWS_FILENAME, MASKS_FILENAME
 
@@ -19,18 +19,8 @@ VIEWER_TABLE = "viewer"
 
 
 def _resolve(path: Path) -> Path:
-    """`path` translated to this machine's own form, auto-mounted if needed.
-
-    A run directory (like a raw data path) may be recorded in whichever OS
-    wrote it -- e.g. the cluster's `/nrs/...` form -- so this is run over any
-    path before touching the filesystem, not just the ones a caller already
-    knows are Janelia paths.
-    """
-    resolved = JaneliaPath(path)
-    if not resolved.exists():
-        resolved.mount()
-    # janelia_pathlib ships no type information, so this is Any even under our override.
-    return cast("Path", resolved)
+    """`path` translated to this machine's own form, auto-mounted if needed."""
+    return resolve_janelia_path(path)
 
 
 def _as_source(url: str, fmt: str) -> str:

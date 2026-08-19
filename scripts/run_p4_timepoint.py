@@ -11,11 +11,13 @@ Usage:
     uv run scripts/run_p4_timepoint.py run <config.toml>
 """
 
+from pathlib import Path
+
 import numpy as np
 import tifffile
-from janelia_pathlib import JaneliaPath
 
 from cellpose_runner import cli_main
+from cellpose_runner._paths import resolve_janelia_path
 
 
 def _center_third(volume: np.ndarray) -> np.ndarray:
@@ -39,14 +41,17 @@ def load_volume(data_loader: dict) -> np.ndarray:
 
 
 def load_volume_processed(data_loader: dict) -> np.ndarray:
-    raw_path = JaneliaPath(data_loader["raw_path"])
+    raw_path = resolve_janelia_path(Path(data_loader["raw_path"]))
     mapped = tifffile.memmap(raw_path)
-    volume = mapped[:].astype(mapped.dtype.newbyteorder("="))
 
+    # Crop the memmap before materializing it: the upsampled file is ~4.5GB
+    # over SMB, of which a center_third run reads ~1/27th. Slicing first means
+    # only the bytes actually wanted cross the network.
     # Defaults to the full volume, so an existing config without this key
     # keeps segmenting what it always did.
     if data_loader.get("center_third", False):
-        volume = _center_third(volume)
+        mapped = _center_third(mapped)
+    volume = np.asarray(mapped).astype(mapped.dtype.newbyteorder("="))
     return volume[..., None]  # ZYX -> ZYXC, single channel
 
 
@@ -54,9 +59,7 @@ def load_volume_raw(data_loader: dict) -> np.ndarray:
     # raw_path is recorded as whichever OS wrote the config (e.g. the
     # cluster's /groups/... form); translate it to this machine's own form
     # (e.g. /Volumes/... on a Mac) rather than assuming it's already correct.
-    raw_path = JaneliaPath(data_loader["raw_path"])
-    if not raw_path.exists():
-        raw_path.mount()
+    raw_path = resolve_janelia_path(Path(data_loader["raw_path"]))
     timepoint = data_loader["timepoint"]
     nuclear_channel = data_loader["nuclear_channel"]
 
