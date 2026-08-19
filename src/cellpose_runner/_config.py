@@ -83,6 +83,30 @@ class NormalizeConfig(BaseModel):
         return {name: value for name, value in self.model_dump().items() if name != "normalize"}
 
 
+class PreprocessConfig(BaseModel):
+    """Parameters consumed before `CellposeModel`'s network forward pass."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Rescales the image to a 30px cell diameter before the forward pass.
+    diameter: float | None = None
+    normalize: NormalizeConfig = NormalizeConfig()
+    # Axis of the input array holding channels.
+    channel_axis: int | None = None
+    # Axis of the input array holding Z, for volumes that have one.
+    z_axis: int | None = None
+
+    def to_eval_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for `CellposeModel.eval()`.
+
+        `normalize` converts from this config's nested `NormalizeConfig` to
+        the bool-or-dict shape `eval()` itself takes.
+        """
+        kwargs = self.model_dump()
+        kwargs["normalize"] = self.normalize.to_eval_arg()
+        return kwargs
+
+
 class CellposeConfig(BaseModel):
     """Parameters for one Cellpose segmentation run.
 
@@ -94,9 +118,9 @@ class CellposeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: ModelConfig = ModelConfig()
+    preprocess: PreprocessConfig = PreprocessConfig()
 
     # CellposeModel.eval(...)
-    diameter: float | None = None
     do_3D: bool = False
     stitch_threshold: float = 0.0
     flow_threshold: float = 0.4
@@ -104,7 +128,6 @@ class CellposeConfig(BaseModel):
     # Gaussian sigma smoothing the 3D flow field before masks are followed
     # from it. 0 (cellpose's default) is no smoothing.
     flow3D_smooth: float = 0.0
-    normalize: NormalizeConfig = NormalizeConfig()
     anisotropy: float | None = None
     min_size: int = 15
     batch_size: int = 8
@@ -123,11 +146,9 @@ class CellposeConfig(BaseModel):
         Derived from the model fields so that a newly added eval parameter is
         forwarded without also having to be listed here.
         """
-        excluded = {"model"} | _OUTPUT_FIELDS
+        excluded = {"model", "preprocess"} | _OUTPUT_FIELDS
         kwargs = {
             name: getattr(self, name) for name in type(self).model_fields if name not in excluded
         }
-        # `normalize` is the one field cellpose takes as a nested structure
-        # rather than a scalar, so it converts rather than passing through.
-        kwargs["normalize"] = self.normalize.to_eval_arg()
+        kwargs.update(self.preprocess.to_eval_kwargs())
         return kwargs

@@ -126,12 +126,15 @@ def test_masks_round_trip_at_the_narrowest_dtype(segmented):
 
 
 def test_eval_receives_the_config(segmented):
-    # z_axis and channel_axis are not part of the config: they're fixed by our
-    # ZYXC contract (channel_axis always last, z_axis present whenever the
-    # array is 4D), not something a caller resolves per run.
+    # channel_axis/z_axis are fixed by our ZYXC contract (channel_axis always
+    # last, z_axis present whenever the array is 4D) -- prepare_run() sets
+    # them on the config before writing config.toml, which segment() then
+    # reads back, so a caller's own values never reach cellpose unmodified.
     config = CellposeConfig(stitch_threshold=0.1)
+    config.preprocess.channel_axis = -1
+    config.preprocess.z_axis = 0
     _, model, _ = segmented
-    assert model.eval_kwargs == {**config.eval_kwargs(), "z_axis": 0, "channel_axis": -1}
+    assert model.eval_kwargs == config.eval_kwargs()
 
 
 def test_eval_receives_no_z_axis_for_a_2d_image(tmp_path, fake_model):

@@ -132,7 +132,10 @@ def prepare_run(
     Args:
         volume: A 3D (YXC) or 4D (ZYXC) array to segment, channels last.
             Single-channel data still needs the axis, e.g. `volume[..., None]`.
-        config: The segmentation parameters.
+        config: The segmentation parameters. Mutated in place: `channel_axis`
+            and `z_axis` are overwritten from `volume`'s own shape before
+            being recorded, so `config.toml` never disagrees with the volume
+            it actually ran against, no matter what the caller passed in.
         output_root: Directory to create the run directory in.
         name: Name for the run directory, in place of a generated slug.
         extra_metadata: Additional tables to write into `config.toml`, keyed
@@ -156,6 +159,14 @@ def prepare_run(
     # leaves nothing behind.
     check_library_is_committed()
 
+    # channel_axis is always the fixed, last axis of our contract; z_axis is
+    # the axis before it exactly when the array carries a Z dimension. Set
+    # here, before config.toml is written, so `segment()` -- which reads the
+    # config back from config.toml rather than trusting a caller's copy --
+    # always sees the axes that actually match volume's shape.
+    config.preprocess.channel_axis = -1
+    config.preprocess.z_axis = 0 if volume.ndim == 4 else None
+
     run_dir, run_name = create_run_dir(output_root, name=name)
     write_run_config(
         run_dir,
@@ -175,9 +186,11 @@ def segment(run_dir: Path, volume: np.ndarray) -> np.ndarray:
     for them. Call `prepare_run()` first to get `run_dir`.
 
     Reads the config back from `run_dir`'s own `config.toml`, rather than
-    taking one as an argument -- that file is the one source of truth for what
-    a run segments with, so this can't drift from it even across a
-    `prepare`/`segment` split across separate processes.
+    taking one as an argument -- that file is the one source of truth for
+    what a run segments with (including `channel_axis`/`z_axis`, which
+    `prepare_run()` sets from `volume`'s shape before writing it), so this
+    can't drift from it even across a `prepare`/`segment` split across
+    separate processes.
 
     Args:
         run_dir: A run directory, as returned by `prepare_run()`.
@@ -188,17 +201,9 @@ def segment(run_dir: Path, volume: np.ndarray) -> np.ndarray:
     """
     config = read_run_config(run_dir)
 
-    # channel_axis is always the fixed, last axis of our contract; z_axis is
-    # the axis before it exactly when the array carries a Z dimension. Passing
-    # both explicitly means cellpose never has to guess which axis is which
-    # from the array's shape.
-    z_axis = 0 if volume.ndim == 4 else None
-
     _reset_cellpose_logging()
     model = _build_model(config)
-    masks, flows, styles = model.eval(
-        volume, channel_axis=-1, z_axis=z_axis, **config.eval_kwargs()
-    )
+    masks, flows, styles = model.eval(volume, **config.eval_kwargs())
 
     dtype = _write_masks(run_dir, masks)
     if config.save_flows:

@@ -8,8 +8,8 @@ cellprob_threshold = -8.0
 flow3D_smooth = 2.0  # Gaussian sigma on the 3D flow field; 0 is no smoothing
 min_size = 200
 
-[cellpose.normalize]
-smooth_radius = 5.0  # in-plane Gaussian sigma in XY pixels; ~1/10 
+[cellpose.preprocess.normalize]
+smooth_radius = 5.0  # in-plane Gaussian sigma in XY pixels; ~1/10
 
 [data-loader]
 raw_path = "/groups/shroff/shrofflab/xinyi/HighSNR_embryo_SLS161/for_Caroline/processed/p4-488/t1.tif"

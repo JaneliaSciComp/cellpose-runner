@@ -4,13 +4,14 @@ import torch
 from cellpose.models import CellposeModel, normalize_default
 
 from cellpose_runner import CellposeConfig, ModelConfig, NormalizeConfig
-from cellpose_runner._config import _OUTPUT_FIELDS
+from cellpose_runner._config import _OUTPUT_FIELDS, PreprocessConfig
 
 
 def test_eval_kwargs_covers_every_remaining_field():
     # Asserted against the field list, not a literal, so a field added later is
     # either forwarded or deliberately excluded -- never silently dropped.
-    expected = set(CellposeConfig.model_fields) - {"model"} - _OUTPUT_FIELDS
+    expected = set(CellposeConfig.model_fields) - {"model", "preprocess"} - _OUTPUT_FIELDS
+    expected |= set(PreprocessConfig.model_fields)
     assert CellposeConfig().eval_kwargs().keys() == expected
 
 
@@ -22,16 +23,17 @@ def test_eval_kwargs_are_accepted_by_cellpose():
 def test_normalize_off_passes_false_not_a_dict():
     # The dict form always implies normalization is on, so "off" has to be the
     # bool -- a dict with normalize=False stripped would silently turn it on.
-    config = CellposeConfig(normalize=NormalizeConfig(normalize=False))
+    config = CellposeConfig(preprocess=PreprocessConfig(normalize=NormalizeConfig(normalize=False)))
     assert config.eval_kwargs()["normalize"] is False
 
 
 def test_normalize_passes_every_field_including_defaults():
     # Runs pin their environment, so the eval call is fully determined by the
     # config rather than partly by whatever cellpose currently defaults to.
-    normalize = CellposeConfig(normalize=NormalizeConfig(smooth_radius=3.0)).eval_kwargs()[
-        "normalize"
-    ]
+    config = CellposeConfig(
+        preprocess=PreprocessConfig(normalize=NormalizeConfig(smooth_radius=3.0))
+    )
+    normalize = config.eval_kwargs()["normalize"]
     assert normalize["smooth_radius"] == 3.0
     # `normalize` itself is the on/off switch, expressed by the dict's presence.
     assert normalize.keys() == set(NormalizeConfig.model_fields) - {"normalize"}

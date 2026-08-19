@@ -14,12 +14,18 @@ from cellpose_runner._config_file import (
 )
 
 
+def _sample_config() -> CellposeConfig:
+    config = CellposeConfig(do_3D=True)
+    config.preprocess.diameter = 30.0
+    return config
+
+
 @pytest.fixture
 def written(tmp_path):
     """A run directory with config.toml written into it, and its parsed contents."""
     config_path = write_run_config(
         tmp_path,
-        CellposeConfig(diameter=30.0, do_3D=True),
+        _sample_config(),
         run_name="agile-seahorse",
         input_shape=(8, 64, 64),
         input_dtype="uint16",
@@ -31,15 +37,16 @@ def written(tmp_path):
 def test_config_round_trips(written):
     _, parsed = written
     config = CellposeConfig(**parsed["cellpose"])
-    assert config == CellposeConfig(diameter=30.0, do_3D=True)
+    assert config == _sample_config()
 
 
 def test_every_set_config_field_is_recorded(written):
     # Defaults are written explicitly, so the file records what ran rather than
     # what was typed. Only fields that are None are absent, since TOML has no
-    # way to represent them.
+    # way to represent them; nested stage configs (model, preprocess) are
+    # never None themselves, so they're always present as nested tables.
     _, parsed = written
-    config = CellposeConfig(diameter=30.0, do_3D=True)
+    config = _sample_config()
     expected = {name for name in CellposeConfig.model_fields if getattr(config, name) is not None}
     assert set(parsed["cellpose"]) == expected
 
