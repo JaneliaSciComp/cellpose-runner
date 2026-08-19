@@ -1,15 +1,16 @@
 import inspect
 
+import torch
 from cellpose.models import CellposeModel, normalize_default
 
-from cellpose_runner import CellposeConfig, NormalizeConfig
-from cellpose_runner._config import _MODEL_FIELDS, _OUTPUT_FIELDS
+from cellpose_runner import CellposeConfig, ModelConfig, NormalizeConfig
+from cellpose_runner._config import _OUTPUT_FIELDS
 
 
 def test_eval_kwargs_covers_every_remaining_field():
     # Asserted against the field list, not a literal, so a field added later is
     # either forwarded or deliberately excluded -- never silently dropped.
-    expected = set(CellposeConfig.model_fields) - _MODEL_FIELDS - _OUTPUT_FIELDS
+    expected = set(CellposeConfig.model_fields) - {"model"} - _OUTPUT_FIELDS
     assert CellposeConfig().eval_kwargs().keys() == expected
 
 
@@ -51,6 +52,22 @@ def test_normalize_matches_cellpose_defaults():
 def test_model_kwargs_are_accepted_by_cellpose():
     accepted = set(inspect.signature(CellposeModel.__init__).parameters)
     assert CellposeConfig().model_kwargs().keys() <= accepted
+
+
+def test_model_kwargs_come_from_nested_model_config():
+    config = CellposeConfig(model=ModelConfig(pretrained_model="livecell", gpu=False))
+    kwargs = config.model_kwargs()
+    assert kwargs["pretrained_model"] == "livecell"
+    assert kwargs["gpu"] is False
+
+
+def test_model_kwargs_converts_device_string_to_torch_device():
+    config = CellposeConfig(model=ModelConfig(device="cpu"))
+    assert config.model_kwargs()["device"] == torch.device("cpu")
+
+
+def test_model_kwargs_device_defaults_to_none():
+    assert CellposeConfig().model_kwargs()["device"] is None
 
 
 def test_do_3d_can_be_flipped_on_one_config():

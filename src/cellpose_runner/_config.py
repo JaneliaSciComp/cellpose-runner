@@ -2,11 +2,37 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-# Fields that configure CellposeModel(...) rather than CellposeModel.eval(...).
-_MODEL_FIELDS = frozenset({"pretrained_model", "gpu"})
-
 # Fields that select which outputs are written and never reach Cellpose.
 _OUTPUT_FIELDS = frozenset({"save_flows", "save_styles"})
+
+
+class ModelConfig(BaseModel):
+    """Parameters for the `CellposeModel(...)` constructor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pretrained_model: str = "cpsam"
+    gpu: bool = True
+    # Cellpose takes a torch.device; a string form is used here so the config
+    # stays plain data (serializable to TOML, comparable, hashable). Overrides
+    # `gpu` when set, matching cellpose's own precedence.
+    device: str | None = None
+    # bfloat16 halves the model's memory footprint against float32, at some
+    # precision cost. Matches cellpose's own default of on.
+    use_bfloat16: bool = True
+
+    def to_init_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for the `CellposeModel` constructor.
+
+        `device` converts from this config's plain string to the `torch.device`
+        cellpose's constructor actually takes.
+        """
+        kwargs = self.model_dump()
+        if kwargs["device"] is not None:
+            import torch
+
+            kwargs["device"] = torch.device(kwargs["device"])
+        return kwargs
 
 
 class NormalizeConfig(BaseModel):
@@ -67,9 +93,7 @@ class CellposeConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # CellposeModel(...)
-    pretrained_model: str = "cpsam"
-    gpu: bool = True
+    model: ModelConfig = ModelConfig()
 
     # CellposeModel.eval(...)
     diameter: float | None = None
@@ -91,7 +115,7 @@ class CellposeConfig(BaseModel):
 
     def model_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for the `CellposeModel` constructor."""
-        return {name: getattr(self, name) for name in sorted(_MODEL_FIELDS)}
+        return self.model.to_init_kwargs()
 
     def eval_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for `CellposeModel.eval()`.
@@ -99,7 +123,7 @@ class CellposeConfig(BaseModel):
         Derived from the model fields so that a newly added eval parameter is
         forwarded without also having to be listed here.
         """
-        excluded = _MODEL_FIELDS | _OUTPUT_FIELDS
+        excluded = {"model"} | _OUTPUT_FIELDS
         kwargs = {
             name: getattr(self, name) for name in type(self).model_fields if name not in excluded
         }
