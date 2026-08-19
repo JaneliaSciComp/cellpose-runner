@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import tomllib
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
@@ -172,3 +173,15 @@ def write_run_config(
     with config_path.open("wb") as f:
         tomli_w.dump({"cellpose": cellpose, "run": run, **(extra or {})}, f)
     return config_path
+
+
+def read_run_config(run_dir: Path) -> CellposeConfig:
+    """Read back the config `write_run_config()` wrote into `run_dir`.
+
+    The one source of truth for what a run actually segments with: reading
+    from `run_dir` rather than trusting a caller's in-memory config means a
+    run always uses what `config.toml` says, even across process boundaries
+    (e.g. a `prepare` and `segment` invoked as separate CLI calls).
+    """
+    with (run_dir / CONFIG_FILENAME).open("rb") as f:
+        return CellposeConfig(**tomllib.load(f)["cellpose"])

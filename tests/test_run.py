@@ -208,7 +208,7 @@ def test_prepare_run_returns_the_run_directory_before_segmenting(tmp_path, volum
 def test_segment_writes_into_a_prepared_run_directory(tmp_path, volume, fake_model):
     config = CellposeConfig()
     run_dir = prepare_run(volume, config, tmp_path)
-    masks = segment(run_dir, volume, config)
+    masks = segment(run_dir, volume)
 
     stored = zarr.open_array(store=run_dir / MASKS_FILENAME)[:]
     assert np.array_equal(stored, masks)
@@ -220,7 +220,7 @@ def test_run_is_prepare_run_then_segment(tmp_path, volume, fake_model):
 
     fake_model.eval_kwargs = None
     run_dir = prepare_run(volume, config, tmp_path, name="split")
-    split = segment(run_dir, volume, config)
+    split = segment(run_dir, volume)
 
     assert np.array_equal(combined, split)
 

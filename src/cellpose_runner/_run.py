@@ -6,7 +6,11 @@ import numpy as np
 import zarr
 
 from cellpose_runner._config import CellposeConfig
-from cellpose_runner._config_file import check_library_is_committed, write_run_config
+from cellpose_runner._config_file import (
+    check_library_is_committed,
+    read_run_config,
+    write_run_config,
+)
 from cellpose_runner._rundir import create_run_dir
 
 MASKS_FILENAME = "masks.zarr"
@@ -164,20 +168,26 @@ def prepare_run(
     return run_dir
 
 
-def segment(run_dir: Path, volume: np.ndarray, config: CellposeConfig) -> np.ndarray:
+def segment(run_dir: Path, volume: np.ndarray) -> np.ndarray:
     """Segment `volume` and write its outputs into `run_dir`.
 
     Writes `masks.zarr`, plus `flows.zarr` and `styles.npy` if the config asks
     for them. Call `prepare_run()` first to get `run_dir`.
 
+    Reads the config back from `run_dir`'s own `config.toml`, rather than
+    taking one as an argument -- that file is the one source of truth for what
+    a run segments with, so this can't drift from it even across a
+    `prepare`/`segment` split across separate processes.
+
     Args:
         run_dir: A run directory, as returned by `prepare_run()`.
         volume: The same array passed to `prepare_run()`.
-        config: The same config passed to `prepare_run()`.
 
     Returns:
         The label array, at the dtype it was stored as.
     """
+    config = read_run_config(run_dir)
+
     # channel_axis is always the fixed, last axis of our contract; z_axis is
     # the axis before it exactly when the array carries a Z dimension. Passing
     # both explicitly means cellpose never has to guess which axis is which
@@ -229,4 +239,4 @@ def run(
         DirtyLibraryError: If this package has uncommitted changes.
     """
     run_dir = prepare_run(volume, config, output_root, name=name, extra_metadata=extra_metadata)
-    return segment(run_dir, volume, config)
+    return segment(run_dir, volume)

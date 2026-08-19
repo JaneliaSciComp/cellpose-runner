@@ -54,7 +54,7 @@ def run_with_logging(
     logger.info("run directory: %s", run_dir)
 
     logger.info("running cellpose on volume %s %s", volume.shape, volume.dtype)
-    masks = segment(run_dir, volume, config)
+    masks = segment(run_dir, volume)
     logger.info("segmented %s, %d labels", masks.shape, masks.max())
     return masks
 
@@ -163,7 +163,7 @@ def cli_main(load_volume: LoadVolume) -> None:
         )
         logger = logging.getLogger(__name__)
         logger.info("running cellpose on volume %s %s", volume.shape, volume.dtype)
-        masks = segment(args.run_dir, volume, config)
+        masks = segment(args.run_dir, volume)
         logger.info("segmented %s, %d labels", masks.shape, masks.max())
     else:
         run_with_logging(volume, config, output_root, extra_metadata=extra_metadata)
