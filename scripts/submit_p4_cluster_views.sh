@@ -44,6 +44,9 @@ with open(sys.argv[1], 'rb') as f:
 RUN_DIR="$(uv run --no-dev --project "$PKG_DIR" "$SCRIPT" prepare "$CONFIG")"
 echo "run directory: $RUN_DIR"
 
+LOG_DIR="$RUN_DIR/logs"
+mkdir -p "$LOG_DIR"
+
 # umask 002: keep output group-writable on shared /nrs storage.
 # No -R rusage[mem=...]: Janelia GPU/CPU queues allocate memory per slot via
 # -n, so passing rusage alongside it is redundant, and multiplies under
@@ -57,8 +60,8 @@ for VIEW in YX ZY ZX; do
         -q "$GPU_QUEUE" \
         -P "$PROJECT" \
         -W "$GPU_WALLTIME" \
-        -o "$RUN_DIR/lsf.view-$VIEW.out" \
-        -e "$RUN_DIR/lsf.view-$VIEW.err" \
+        -o "$LOG_DIR/lsf.view-$VIEW.out" \
+        -e "$LOG_DIR/lsf.view-$VIEW.err" \
         "umask 002; uv run --no-dev --project $PKG_DIR $SCRIPT run-view $RUN_DIR $VIEW $CONFIG")"
     echo "$JOB_OUTPUT"
     # bsub prints "Job <12345> is submitted to queue <...>." on stdout.
@@ -77,6 +80,6 @@ bsub \
     -P "$PROJECT" \
     -W "$CONSOLIDATE_WALLTIME" \
     -w "$DEPENDENCY" \
-    -o "$RUN_DIR/lsf.consolidate.out" \
-    -e "$RUN_DIR/lsf.consolidate.err" \
+    -o "$LOG_DIR/lsf.consolidate.out" \
+    -e "$LOG_DIR/lsf.consolidate.err" \
     "umask 002; uv run --no-dev --project $PKG_DIR $SCRIPT consolidate $RUN_DIR $CONFIG"
