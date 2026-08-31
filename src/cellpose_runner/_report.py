@@ -34,19 +34,43 @@ def _discover_runs(runs_root: Path) -> list[Path]:
     return sorted(p.parent for p in runs_root.glob(f"*/{CONFIG_FILENAME}"))
 
 
+def _flatten(value: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    """Flatten nested tables (`model`, `preprocess.normalize`, ...) into `parent.child` columns.
+
+    `config.toml`'s stage sub-tables (`model`, `preprocess`, `inference`,
+    `postprocess`, `preprocess.normalize`) come back from `tomllib` as plain
+    nested dicts. Left nested, a report column would just render `[object
+    Object]` -- not useful for comparing runs. Recurses arbitrarily deep so
+    it doesn't need updating if a stage config grows another nested table.
+    """
+    flat: dict[str, Any] = {}
+    for key, val in value.items():
+        column = f"{prefix}.{key}" if prefix else key
+        if isinstance(val, dict):
+            flat.update(_flatten(val, column))
+        else:
+            flat[column] = val
+    return flat
+
+
 def _row(run_dir: Path) -> dict[str, Any]:
     with (run_dir / CONFIG_FILENAME).open("rb") as f:
         toml = tomllib.load(f)
     cellpose = toml.get("cellpose", {})
     run = toml.get("run", {})
+    data_loader = toml.get("data-loader", {})
     return {
         "run_name": run.get("run_name", run_dir.name),
-        # Every [run] and [cellpose] field config.toml recorded, defaults
-        # included -- not a hand-picked subset, so a newly added field (in
-        # either table, or one this report doesn't know about) still shows
-        # up for comparison. run_name is pulled out above so it stays first.
+        # Every [run], [cellpose], and [data-loader] field config.toml
+        # recorded, defaults included -- not a hand-picked subset, so a
+        # newly added field (in any table, or one this report doesn't know
+        # about) still shows up for comparison. run_name is pulled out above
+        # so it stays first; data-loader fields are prefixed to distinguish
+        # e.g. a loader's own "center_third" from a [cellpose] field of the
+        # same name.
         **{k: v for k, v in run.items() if k != "run_name"},
-        **cellpose,
+        **_flatten(cellpose),
+        **_flatten(data_loader, prefix="data-loader"),
         "status": "done" if (run_dir / MASKS_FILENAME).exists() else f"no {MASKS_FILENAME}",
     }
 

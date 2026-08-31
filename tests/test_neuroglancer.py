@@ -5,6 +5,7 @@ import zarr
 from cellpose_runner import CellposeConfig, prepare_run
 from cellpose_runner._neuroglancer import (
     _as_source,
+    _minmax_shader_controls,
     _persist_viewer_table,
     _read_viewer_table,
     _to_xyz,
@@ -148,6 +149,11 @@ def test_to_xyz_passes_through_masks_with_no_channel_axis():
     # distinguish this rank-3 array from a channelled YXC one, hence the flag.
     array = np.zeros((4, 8, 16), dtype=np.uint16)
     assert _to_xyz(array, has_channel_axis=False).shape == (16, 8, 4)
+
+
+def test_minmax_shader_controls_uses_the_array_own_range():
+    array = np.array([10, 20, 200], dtype=np.uint16)
+    assert _minmax_shader_controls(array) == {"normalized": {"range": [10.0, 200.0]}}
 
 
 def test_serve_view_requires_a_data_loader_table(run_dir, monkeypatch):

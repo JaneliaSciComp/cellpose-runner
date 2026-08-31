@@ -143,6 +143,19 @@ def _to_xyz(array: np.ndarray, *, has_channel_axis: bool) -> np.ndarray:
     return spatial.transpose(*reversed(range(spatial.ndim)))
 
 
+def _minmax_shader_controls(array: np.ndarray) -> dict[str, dict[str, list[float]]]:
+    """`shaderControls` setting an image layer's normalized range to `array`'s actual min/max.
+
+    Neuroglancer's default range guess is dtype-based (e.g. 0-65535 for
+    uint16), which renders as near-black for the low-intensity range typical
+    of sparse fluorescence signal. The UI's own "auto min/max" contrast
+    button inspects rendered pixels client-side in the browser -- there's no
+    equivalent server-side/API call -- so this computes the same result the
+    button would, from the volume already loaded here, and sets it upfront.
+    """
+    return {"normalized": {"range": [float(array.min()), float(array.max())]}}
+
+
 def serve_view(run_dir: Path, load_volume: "LoadVolume") -> str:
     """Serve `run_dir`'s masks alongside its raw image, loaded directly.
 
@@ -182,11 +195,13 @@ def serve_view(run_dir: Path, load_volume: "LoadVolume") -> str:
     viewer = neuroglancer.Viewer()
     with viewer.txn() as state:
         state.layers["image"] = neuroglancer.ImageLayer(
-            source=neuroglancer.LocalVolume(data=_to_xyz(volume, has_channel_axis=True))
+            source=neuroglancer.LocalVolume(data=_to_xyz(volume, has_channel_axis=True)),
+            shader_controls=_minmax_shader_controls(volume),
         )
         if save_flows:
             state.layers["cellprob"] = neuroglancer.ImageLayer(
-                source=neuroglancer.LocalVolume(data=_to_xyz(cellprob, has_channel_axis=False))
+                source=neuroglancer.LocalVolume(data=_to_xyz(cellprob, has_channel_axis=False)),
+                shader_controls=_minmax_shader_controls(cellprob),
             )
 
         state.layers["masks"] = neuroglancer.SegmentationLayer(

@@ -11,6 +11,7 @@ from cellpose_runner import (
 from cellpose_runner._report import (
     MASKS_FILENAME,
     _discover_runs,
+    _flatten,
     _row,
     _varies_across_rows,
     fileglancer_url,
@@ -61,12 +62,12 @@ def test_row_reads_cellpose_and_run_fields(tmp_path):
 
     # Every [cellpose] field, not a hand-picked subset -- including ones the
     # test didn't set, since config.toml records resolved defaults too.
-    # Nested stage tables (model, preprocess, inference, postprocess) come
-    # through as nested dicts, same as config.toml itself, rather than being
-    # flattened.
+    # Nested stage tables (model, preprocess, inference, postprocess) are
+    # flattened into "parent.child" columns, since a report column holding a
+    # raw dict would just render as "[object Object]".
     assert row["mode"] == "three_d_flows"
-    assert row["preprocess"]["diameter"] == 30.0
-    assert row["inference"]["batch_size"] == InferenceConfig.model_fields["batch_size"].default
+    assert row["preprocess.diameter"] == 30.0
+    assert row["inference.batch_size"] == InferenceConfig.model_fields["batch_size"].default
     # Every [run] field alongside them.
     assert row["input_shape"] == list(volume.shape)
     assert row["input_dtype"] == str(volume.dtype)
@@ -76,6 +77,38 @@ def test_row_reads_cellpose_and_run_fields(tmp_path):
     assert "path" not in row
     # No masks.zarr yet: prepare_run() only sets the run directory up.
     assert row["status"] == f"no {MASKS_FILENAME}"
+
+
+def test_row_reads_data_loader_fields_with_a_prefix(tmp_path):
+    volume = np.zeros((4, 8, 8, 1), dtype=np.uint16)
+    run_dir = prepare_run(
+        volume,
+        CellposeConfig(),
+        tmp_path,
+        extra_metadata={
+            "data-loader": {"raw_path": "/data/p4.tif", "timepoint": 0, "center_third": True}
+        },
+    )
+
+    row = _row(run_dir)
+
+    # Prefixed so a loader's own field (e.g. "center_third") can't collide
+    # with a same-named [cellpose] field.
+    assert row["data-loader.raw_path"] == "/data/p4.tif"
+    assert row["data-loader.timepoint"] == 0
+    assert row["data-loader.center_third"] is True
+
+
+def test_flatten_joins_nested_keys_with_a_dot():
+    assert _flatten({"a": 1, "b": {"c": 2}}) == {"a": 1, "b.c": 2}
+
+
+def test_flatten_recurses_arbitrarily_deep():
+    assert _flatten({"a": {"b": {"c": 3}}}) == {"a.b.c": 3}
+
+
+def test_flatten_leaves_a_flat_dict_unchanged():
+    assert _flatten({"a": 1, "b": 2}) == {"a": 1, "b": 2}
 
 
 def test_varies_across_rows_true_when_values_differ():
