@@ -49,6 +49,7 @@ def run_with_logging(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(message)s",
         handlers=[logging.StreamHandler(), logging.FileHandler(run_dir / LOG_FILENAME)],
+        force=True,
     )
     logger = logging.getLogger(__name__)
     logger.info("config: %s", config)
@@ -66,6 +67,13 @@ def _configure_logging(run_dir: Path, job_label: str) -> logging.Logger:
     Each of the (up to) 4 jobs sharing a run directory (3 views + a
     consolidation) gets its own log file rather than sharing `script.log` --
     concurrent processes writing one file would interleave.
+
+    `force=True` because `basicConfig()` is otherwise a no-op once the root
+    logger already has handlers -- true for every job in production (each is
+    its own process, this only ever runs once), but not for a test process
+    invoking `cli_main()` more than once; without `force=True`, a later call
+    would silently discard its own just-opened `FileHandler` (never attached,
+    never closed) while keeping an earlier call's handler live.
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -74,6 +82,7 @@ def _configure_logging(run_dir: Path, job_label: str) -> logging.Logger:
             logging.StreamHandler(),
             logging.FileHandler(run_dir / f"script.{job_label}.log"),
         ],
+        force=True,
     )
     return logging.getLogger(__name__)
 

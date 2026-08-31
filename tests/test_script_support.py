@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import pytest
 import tomli_w
@@ -9,6 +11,27 @@ from cellpose_runner._script_support import cli_main, resolve_run_dir
 @pytest.fixture(autouse=True)
 def _committed(monkeypatch):
     monkeypatch.setattr("cellpose_runner._run.check_library_is_committed", lambda: None)
+
+
+def _close_root_logging_handlers():
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        handler.close()
+        root.removeHandler(handler)
+
+
+@pytest.fixture(autouse=True)
+def _reset_root_logging_handlers():
+    """Close root logger handlers `cli_main` adds via `logging.basicConfig(force=True)`.
+
+    Each CLI test's `_configure_logging()` call opens a `FileHandler` into a
+    `tmp_path`-scoped log file; closing it here (rather than leaving that to
+    the next `force=True` call) means the handle doesn't outlive `tmp_path`'s
+    own cleanup, which pytest's unraisable-exception hook would otherwise
+    flag on a later garbage collection.
+    """
+    yield
+    _close_root_logging_handlers()
 
 
 def _write_config(config_path, output_root):
