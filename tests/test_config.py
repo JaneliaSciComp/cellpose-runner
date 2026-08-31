@@ -1,23 +1,48 @@
 import inspect
 
+import pytest
 import torch
 from cellpose.models import CellposeModel, normalize_default
+from pydantic import ValidationError
 
-from cellpose_runner import CellposeConfig, ModelConfig, NormalizeConfig
-from cellpose_runner._config import _OUTPUT_FIELDS, PreprocessConfig
+from cellpose_runner import (
+    CellposeConfig,
+    ModelConfig,
+    NormalizeConfig,
+    StitchPostprocessConfig,
+    ThreeDFlowsInferenceConfig,
+    ThreeDFlowsPostprocessConfig,
+)
+from cellpose_runner._config import PreprocessConfig
+
+_MODE_CONFIGS = {
+    "two_d": CellposeConfig(),
+    "stitch": CellposeConfig(
+        mode="stitch", postprocess=StitchPostprocessConfig(stitch_threshold=0.3)
+    ),
+    "three_d_flows": CellposeConfig(
+        mode="three_d_flows",
+        inference=ThreeDFlowsInferenceConfig(anisotropy=2.0),
+        postprocess=ThreeDFlowsPostprocessConfig(flow3D_smooth=1.0),
+    ),
+}
 
 
-def test_eval_kwargs_covers_every_remaining_field():
+@pytest.mark.parametrize("config", _MODE_CONFIGS.values(), ids=_MODE_CONFIGS.keys())
+def test_eval_kwargs_covers_every_remaining_field(config):
     # Asserted against the field list, not a literal, so a field added later is
     # either forwarded or deliberately excluded -- never silently dropped.
-    expected = set(CellposeConfig.model_fields) - {"model", "preprocess"} - _OUTPUT_FIELDS
-    expected |= set(PreprocessConfig.model_fields)
-    assert CellposeConfig().eval_kwargs().keys() == expected
+    expected = set(PreprocessConfig.model_fields)
+    expected |= set(type(config.inference).model_fields)
+    expected |= set(type(config.postprocess).model_fields)
+    expected |= {"do_3D", "stitch_threshold"}
+    assert config.eval_kwargs().keys() == expected
 
 
-def test_eval_kwargs_are_accepted_by_cellpose():
+@pytest.mark.parametrize("config", _MODE_CONFIGS.values(), ids=_MODE_CONFIGS.keys())
+def test_eval_kwargs_are_accepted_by_cellpose(config):
     accepted = set(inspect.signature(CellposeModel.eval).parameters)
-    assert CellposeConfig().eval_kwargs().keys() <= accepted
+    assert config.eval_kwargs().keys() <= accepted
 
 
 def test_normalize_off_passes_false_not_a_dict():
@@ -72,11 +97,27 @@ def test_model_kwargs_device_defaults_to_none():
     assert CellposeConfig().model_kwargs()["device"] is None
 
 
-def test_do_3d_can_be_flipped_on_one_config():
-    # One base config carries both modes' parameters; flipping do_3D needs no
-    # bookkeeping about which fields to strip.
-    base = CellposeConfig(do_3D=True, anisotropy=2.0, stitch_threshold=0.3)
-    flipped = base.model_copy(update={"do_3D": False})
-    assert flipped.do_3D is False
-    assert flipped.anisotropy == 2.0
-    assert flipped.stitch_threshold == 0.3
+def test_switching_mode_uses_a_distinct_inference_postprocess_pair():
+    # Modes aren't one shared config with a flipped bool any more -- each
+    # mode's extra fields live on that mode's own subclass pair.
+    three_d_flows = _MODE_CONFIGS["three_d_flows"]
+    stitched = _MODE_CONFIGS["stitch"]
+
+    assert three_d_flows.eval_kwargs()["do_3D"] is True
+    assert three_d_flows.eval_kwargs()["anisotropy"] == 2.0
+    assert three_d_flows.eval_kwargs()["flow3D_smooth"] == 1.0
+    # 3D-flows mode's postprocess has no stitch_threshold field at all.
+    assert stitched.eval_kwargs()["do_3D"] is False
+    assert stitched.eval_kwargs()["stitch_threshold"] == 0.3
+
+
+def test_mismatched_mode_and_stage_config_is_rejected():
+    # The mode/stage-pair validator is what prevents constructing the
+    # nonsensical states do_3D-gating used to allow implicitly, e.g.
+    # 3D-flows inference paired with stitch postprocessing.
+    with pytest.raises(ValidationError, match="mode"):
+        CellposeConfig(
+            mode="three_d_flows",
+            inference=ThreeDFlowsInferenceConfig(anisotropy=2.0),
+            postprocess=StitchPostprocessConfig(stitch_threshold=0.3),
+        )

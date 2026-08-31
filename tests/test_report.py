@@ -1,7 +1,13 @@
 import numpy as np
 import pytest
 
-from cellpose_runner import CellposeConfig, prepare_run
+from cellpose_runner import (
+    CellposeConfig,
+    InferenceConfig,
+    ThreeDFlowsInferenceConfig,
+    ThreeDFlowsPostprocessConfig,
+    prepare_run,
+)
 from cellpose_runner._report import (
     MASKS_FILENAME,
     _discover_runs,
@@ -43,7 +49,11 @@ def test_discover_runs_finds_only_directories_with_a_config(tmp_path):
 
 def test_row_reads_cellpose_and_run_fields(tmp_path):
     volume = np.zeros((4, 8, 8, 1), dtype=np.uint16)
-    config = CellposeConfig(do_3D=True)
+    config = CellposeConfig(
+        mode="three_d_flows",
+        inference=ThreeDFlowsInferenceConfig(),
+        postprocess=ThreeDFlowsPostprocessConfig(),
+    )
     config.preprocess.diameter = 30.0
     run_dir = prepare_run(volume, config, tmp_path)
 
@@ -51,11 +61,12 @@ def test_row_reads_cellpose_and_run_fields(tmp_path):
 
     # Every [cellpose] field, not a hand-picked subset -- including ones the
     # test didn't set, since config.toml records resolved defaults too.
-    # Nested stage tables (model, preprocess) come through as nested dicts,
-    # same as config.toml itself, rather than being flattened.
-    assert row["do_3D"] is True
+    # Nested stage tables (model, preprocess, inference, postprocess) come
+    # through as nested dicts, same as config.toml itself, rather than being
+    # flattened.
+    assert row["mode"] == "three_d_flows"
     assert row["preprocess"]["diameter"] == 30.0
-    assert row["batch_size"] == CellposeConfig.model_fields["batch_size"].default
+    assert row["inference"]["batch_size"] == InferenceConfig.model_fields["batch_size"].default
     # Every [run] field alongside them.
     assert row["input_shape"] == list(volume.shape)
     assert row["input_dtype"] == str(volume.dtype)

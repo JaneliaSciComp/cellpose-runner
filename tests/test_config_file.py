@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from cellpose_runner import CellposeConfig
+from cellpose_runner import CellposeConfig, ThreeDFlowsInferenceConfig, ThreeDFlowsPostprocessConfig
 from cellpose_runner._config_file import (
     LOCK_FILENAME,
     DirtyLibraryError,
@@ -15,7 +15,11 @@ from cellpose_runner._config_file import (
 
 
 def _sample_config() -> CellposeConfig:
-    config = CellposeConfig(do_3D=True)
+    config = CellposeConfig(
+        mode="three_d_flows",
+        inference=ThreeDFlowsInferenceConfig(),
+        postprocess=ThreeDFlowsPostprocessConfig(),
+    )
     config.preprocess.diameter = 30.0
     return config
 

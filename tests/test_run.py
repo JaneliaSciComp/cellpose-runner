@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import zarr
 
-from cellpose_runner import CellposeConfig
+from cellpose_runner import CellposeConfig, StitchPostprocessConfig
 from cellpose_runner._config_file import CONFIG_FILENAME, LOCK_FILENAME
 from cellpose_runner._run import (
     FLOWS_FILENAME,
@@ -68,7 +68,11 @@ def volume():
 @pytest.fixture
 def segmented(tmp_path, volume, fake_model):
     """A completed run, returning its directory and the model that served it."""
-    masks = run(volume, CellposeConfig(stitch_threshold=0.1), tmp_path)
+    masks = run(
+        volume,
+        CellposeConfig(mode="stitch", postprocess=StitchPostprocessConfig(stitch_threshold=0.1)),
+        tmp_path,
+    )
     run_dir = next(tmp_path.iterdir())
     return run_dir, fake_model, masks
 
@@ -130,7 +134,9 @@ def test_eval_receives_the_config(segmented):
     # last, z_axis present whenever the array is 4D) -- prepare_run() sets
     # them on the config before writing config.toml, which segment() then
     # reads back, so a caller's own values never reach cellpose unmodified.
-    config = CellposeConfig(stitch_threshold=0.1)
+    config = CellposeConfig(
+        mode="stitch", postprocess=StitchPostprocessConfig(stitch_threshold=0.1)
+    )
     config.preprocess.channel_axis = -1
     config.preprocess.z_axis = 0
     _, model, _ = segmented

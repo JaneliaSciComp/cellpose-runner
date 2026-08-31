@@ -1,9 +1,6 @@
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
-
-# Fields that select which outputs are written and never reach Cellpose.
-_OUTPUT_FIELDS = frozenset({"save_flows", "save_styles"})
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class ModelConfig(BaseModel):
@@ -107,34 +104,159 @@ class PreprocessConfig(BaseModel):
         return kwargs
 
 
-class CellposeConfig(BaseModel):
-    """Parameters for one Cellpose segmentation run.
+class InferenceConfig(BaseModel):
+    """Parameters for `CellposeModel.eval()`'s network forward pass (`_run_net`).
 
-    Fields map onto `CellposeModel` constructor and its `eval()` method, except for
-    `save_flows` and `save_styles`, which select what gets written to the run
-    directory.
+    Common to every segmentation mode. `anisotropy` (3D-flows only) is on
+    `ThreeDFlowsInferenceConfig`, not here, since it only resizes the volume
+    when `do_3D` is set.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    model: ModelConfig = ModelConfig()
-    preprocess: PreprocessConfig = PreprocessConfig()
+    batch_size: int = 8
+    resample: bool = True
+    augment: bool = False
+    tile_overlap: float = 0.1
+    # None lets cellpose pick its own default tile size.
+    bsize: int | None = None
 
-    # CellposeModel.eval(...)
-    do_3D: bool = False
-    stitch_threshold: float = 0.0
+
+class ThreeDFlowsInferenceConfig(InferenceConfig):
+    """`InferenceConfig` for the 3D-flows mode, adding its one inference-stage field.
+
+    `anisotropy` resizes the volume before the forward pass so a
+    coarser-sampled Z axis is treated at the same physical scale as XY --
+    only meaningful when the network is run in 3D-flows mode (`do_3D=True`).
+    """
+
+    # e.g. 2.0 when Z is sampled half as densely as X or Y. None (cellpose's
+    # default) applies no rescaling.
+    anisotropy: float | None = None
+
+
+class PostprocessConfig(BaseModel):
+    """Parameters for mask computation after the network forward pass (`_compute_masks`).
+
+    Common to every segmentation mode. `stitch_threshold` (stitch mode) and
+    `flow3D_smooth` (3D-flows mode) are on their own subclasses below, since
+    each only does anything in its one mode.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     flow_threshold: float = 0.4
     cellprob_threshold: float = 0.0
-    # Gaussian sigma smoothing the 3D flow field before masks are followed
-    # from it. 0 (cellpose's default) is no smoothing.
-    flow3D_smooth: float = 0.0
-    anisotropy: float | None = None
     min_size: int = 15
-    batch_size: int = 8
+    # Masks larger than this fraction of the image are discarded as
+    # (likely) merged/background artifacts.
+    max_size_fraction: float = 0.4
+    # None lets cellpose pick its own default number of dynamics iterations.
+    niter: int | None = None
+
+
+class StitchPostprocessConfig(PostprocessConfig):
+    """`PostprocessConfig` for the stitch mode, adding its one postprocessing field.
+
+    `stitch_threshold` stitches per-plane 2D masks into 3D (`utils.stitch3D`)
+    by IoU overlap between adjacent planes -- the network itself never sees a
+    3D flow field in this mode.
+    """
+
+    stitch_threshold: float = 0.0
+
+
+class ThreeDFlowsPostprocessConfig(PostprocessConfig):
+    """`PostprocessConfig` for the 3D-flows mode, adding its one postprocessing field.
+
+    `flow3D_smooth` gaussian-smooths the 3D flow field before masks are
+    followed from it, before `_compute_masks` runs. 0 (cellpose's default) is
+    no smoothing.
+    """
+
+    flow3D_smooth: float = 0.0
+
+
+_MODE_INFERENCE: dict[str, type[InferenceConfig]] = {
+    "two_d": InferenceConfig,
+    "stitch": InferenceConfig,
+    "three_d_flows": ThreeDFlowsInferenceConfig,
+}
+_MODE_POSTPROCESS: dict[str, type[PostprocessConfig]] = {
+    "two_d": PostprocessConfig,
+    "stitch": StitchPostprocessConfig,
+    "three_d_flows": ThreeDFlowsPostprocessConfig,
+}
+_MODE_TO_DO_3D: dict[str, bool] = {
+    "two_d": False,
+    "stitch": False,
+    "three_d_flows": True,
+}
+
+
+class CellposeConfig(BaseModel):
+    """Parameters for one Cellpose segmentation run.
+
+    Fields map onto `CellposeModel`'s constructor and its `eval()` method,
+    except for `save_flows` and `save_styles`, which select what gets written
+    to the run directory. `mode` selects one of cellpose's three genuinely
+    different segmentation algorithms (2D, stitch, 3D-flows -- see
+    `scratch/config-reorg-plan.md`) and constrains which `inference`/
+    `postprocess` subclass pairs with it, so a mode-specific field (e.g.
+    `anisotropy`) can't be set for a mode it does nothing in.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["two_d", "stitch", "three_d_flows"] = "two_d"
+    model: ModelConfig = ModelConfig()
+    preprocess: PreprocessConfig = PreprocessConfig()
+    inference: InferenceConfig | ThreeDFlowsInferenceConfig = InferenceConfig()
+    postprocess: PostprocessConfig | StitchPostprocessConfig | ThreeDFlowsPostprocessConfig = (
+        PostprocessConfig()
+    )
 
     # Output selection
     save_flows: bool = False
     save_styles: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _parse_stage_configs_for_mode(cls, data: Any) -> Any:
+        """Parse `inference`/`postprocess` dicts against `mode`'s own subclass.
+
+        A dict lacking a mode-specific field (e.g. `anisotropy` omitted
+        because `_without_nones` stripped it before writing TOML) still
+        structurally validates against the plain base config, so pydantic's
+        smart-union would silently pick the base class over the mode's own
+        subclass -- the wrong type, but not a type error. Parsing explicitly
+        against `mode`'s subclass here, before that union resolution runs,
+        makes the round trip exact regardless of which fields a dict omits.
+        """
+        if not isinstance(data, dict) or "mode" not in data:
+            return data
+        mode = data["mode"]
+        if isinstance(data.get("inference"), dict) and mode in _MODE_INFERENCE:
+            data = {**data, "inference": _MODE_INFERENCE[mode](**data["inference"])}
+        if isinstance(data.get("postprocess"), dict) and mode in _MODE_POSTPROCESS:
+            data = {**data, "postprocess": _MODE_POSTPROCESS[mode](**data["postprocess"])}
+        return data
+
+    @model_validator(mode="after")
+    def _check_mode_matches_stage_configs(self) -> "CellposeConfig":
+        expected_inference = _MODE_INFERENCE[self.mode]
+        expected_postprocess = _MODE_POSTPROCESS[self.mode]
+        if type(self.inference) is not expected_inference:
+            raise ValueError(
+                f"mode={self.mode!r} requires inference={expected_inference.__name__}, "
+                f"got {type(self.inference).__name__}."
+            )
+        if type(self.postprocess) is not expected_postprocess:
+            raise ValueError(
+                f"mode={self.mode!r} requires postprocess={expected_postprocess.__name__}, "
+                f"got {type(self.postprocess).__name__}."
+            )
+        return self
 
     def model_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for the `CellposeModel` constructor."""
@@ -143,12 +265,17 @@ class CellposeConfig(BaseModel):
     def eval_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for `CellposeModel.eval()`.
 
-        Derived from the model fields so that a newly added eval parameter is
-        forwarded without also having to be listed here.
+        Merges every stage config's fields (preprocess, inference,
+        postprocess) unconditionally, then translates `mode` into cellpose's
+        own `do_3D` flag at this boundary -- `mode` doesn't exist in
+        cellpose's own API, so it is never passed through itself.
         """
-        excluded = {"model", "preprocess"} | _OUTPUT_FIELDS
-        kwargs = {
-            name: getattr(self, name) for name in type(self).model_fields if name not in excluded
-        }
-        kwargs.update(self.preprocess.to_eval_kwargs())
+        kwargs = self.preprocess.to_eval_kwargs()
+        kwargs.update(self.inference.model_dump())
+        kwargs.update(self.postprocess.model_dump())
+        kwargs["do_3D"] = _MODE_TO_DO_3D[self.mode]
+        # stitch_threshold only exists as a field on StitchPostprocessConfig;
+        # every other mode's postprocess config has none, so cellpose's own
+        # default (0.0, meaning "off") is correct without an explicit else.
+        kwargs.setdefault("stitch_threshold", 0.0)
         return kwargs

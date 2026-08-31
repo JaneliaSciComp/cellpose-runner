@@ -2,7 +2,17 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from ._config import CellposeConfig, ModelConfig, NormalizeConfig
+from ._config import (
+    CellposeConfig,
+    InferenceConfig,
+    ModelConfig,
+    NormalizeConfig,
+    PostprocessConfig,
+    PreprocessConfig,
+    StitchPostprocessConfig,
+    ThreeDFlowsInferenceConfig,
+    ThreeDFlowsPostprocessConfig,
+)
 from ._neuroglancer import neuroglancer_url, serve_view, view
 from ._report import fileglancer_url, report
 from ._run import prepare_run, run, segment
@@ -15,9 +25,15 @@ except PackageNotFoundError:  # package is not installed
 
 __all__ = [
     "CellposeConfig",
+    "InferenceConfig",
     "LoadVolume",
     "ModelConfig",
     "NormalizeConfig",
+    "PostprocessConfig",
+    "PreprocessConfig",
+    "StitchPostprocessConfig",
+    "ThreeDFlowsInferenceConfig",
+    "ThreeDFlowsPostprocessConfig",
     "__version__",
     "cli_main",
     "fileglancer_url",

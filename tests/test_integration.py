@@ -4,7 +4,13 @@ import numpy as np
 import pytest
 import zarr
 
-from cellpose_runner import CellposeConfig, run
+from cellpose_runner import (
+    CellposeConfig,
+    StitchPostprocessConfig,
+    ThreeDFlowsInferenceConfig,
+    ThreeDFlowsPostprocessConfig,
+    run,
+)
 from cellpose_runner._config_file import CONFIG_FILENAME, LOCK_FILENAME
 from cellpose_runner._run import MASKS_FILENAME
 
@@ -28,8 +34,20 @@ def _committed(monkeypatch):
     "shape, config",
     [
         ((64, 64, 1), CellposeConfig()),
-        ((8, 64, 64, 1), CellposeConfig(stitch_threshold=0.1)),
-        ((8, 64, 64, 1), CellposeConfig(do_3D=True)),
+        (
+            (8, 64, 64, 1),
+            CellposeConfig(
+                mode="stitch", postprocess=StitchPostprocessConfig(stitch_threshold=0.1)
+            ),
+        ),
+        (
+            (8, 64, 64, 1),
+            CellposeConfig(
+                mode="three_d_flows",
+                inference=ThreeDFlowsInferenceConfig(),
+                postprocess=ThreeDFlowsPostprocessConfig(),
+            ),
+        ),
     ],
     ids=["2d", "3d_stitched", "3d_do_3D"],
 )
