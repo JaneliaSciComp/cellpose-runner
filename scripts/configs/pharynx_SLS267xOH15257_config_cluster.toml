@@ -1,0 +1,16 @@
+output_root = "/nrs/shroff/malinmayorc/cellpose/SLS267xOH15257"
+lsf_project = "shroff"  # LSF billing project for scripts/submit_p4_cluster.sh
+
+[cellpose]
+do_3D = true
+# No anisotropy: Downsampled_Data is isotropic (scaled by 1/2 from the isotropic processed data).
+flow_threshold = 0.4
+cellprob_threshold = -8.0
+flow3D_smooth = 2.0  # Gaussian sigma on the 3D flow field; 0 is no smoothing
+min_size = 200
+
+[cellpose.preprocess.normalize]
+smooth_radius = 2.0
+
+[data-loader]
+raw_path = "/nrs/shroff/Pharynx_Project/Data/SLS267xOH15257/080626_Dataset_2/Downsampled_Data/Background_Subtraction/RegA/Decon_reg_7.tif"
