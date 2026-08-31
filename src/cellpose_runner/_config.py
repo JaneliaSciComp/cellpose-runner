@@ -236,10 +236,10 @@ class CellposeConfig(BaseModel):
         if not isinstance(data, dict) or "mode" not in data:
             return data
         mode = data["mode"]
-        if isinstance(data.get("inference"), dict) and mode in _MODE_INFERENCE:
-            data = {**data, "inference": _MODE_INFERENCE[mode](**data["inference"])}
-        if isinstance(data.get("postprocess"), dict) and mode in _MODE_POSTPROCESS:
-            data = {**data, "postprocess": _MODE_POSTPROCESS[mode](**data["postprocess"])}
+        if mode in _MODE_INFERENCE and isinstance(data.get("inference", {}), dict):
+            data = {**data, "inference": _MODE_INFERENCE[mode](**data.get("inference", {}))}
+        if mode in _MODE_POSTPROCESS and isinstance(data.get("postprocess", {}), dict):
+            data = {**data, "postprocess": _MODE_POSTPROCESS[mode](**data.get("postprocess", {}))}
         return data
 
     @model_validator(mode="after")

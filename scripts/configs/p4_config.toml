@@ -1,7 +1,9 @@
 output_root = "~/experiments/HighSNR_embryo_SLS161/p4"
 
 [cellpose]
-do_3D = true
+mode = "three_d_flows"
+
+[cellpose.inference]
 anisotropy = 9.355  # Z spacing 0.5um / XY pixel size 0.0534um, raw/p4.tif
 
 [data-loader]
