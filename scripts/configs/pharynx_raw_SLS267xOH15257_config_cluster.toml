@@ -17,4 +17,5 @@ flow3D_smooth = 2.0  # Gaussian sigma on the 3D flow field; 0 is no smoothing
 min_size = 200
 
 [data-loader]
-raw_path = "/nrs/shroff/Pharynx_Project/Data/SLS267xOH15257/080626_Dataset_2/Raw_Data/488/t7.tif"
+raw_path = "/nrs/shroff/Pharynx_Project/Data/SLS267xOH15257/080626_Dataset_2/Raw_Data/561/t7.tif"
+center_third_xy = true

@@ -6,7 +6,7 @@ mode = "three_d_flows"
 # No anisotropy: processed data is isotropic.
 
 [cellpose.preprocess.normalize]
-smooth_radius = 5.0  # in-plane Gaussian sigma in XY pixels; ~1/10
+smooth_radius = 2.0  # in-plane Gaussian sigma in XY pixels; ~1/10
 
 [cellpose.postprocess]
 flow_threshold = 0.4
@@ -16,4 +16,4 @@ min_size = 200
 
 [data-loader]
 raw_path = "/groups/shroff/shrofflab/xinyi/HighSNR_embryo_SLS161/for_Caroline/processed/p4-488/t1.tif"
-center_third = true  # ~27x less work for a parameter sweep; edges of the embryo are cut off
+center_third = false  # ~27x less work for a parameter sweep; edges of the embryo are cut off
