@@ -30,6 +30,7 @@ dependencies = [
     "janelia-pathlib",
     "numpy>=1.26,<3",
     "pydantic>=2.7,<3",
+    "scipy>=1.11,<2",
     "tifffile>=2024.1,<2027",
     "tomli-w>=1,<2",
     "zarr>=3,<4",
@@ -136,7 +137,7 @@ pretty = true
 
 # cellpose ships no type information, so calls into it are untyped.
 [[tool.mypy.overrides]]
-module = ["cellpose.*", "janelia_pathlib.*", "neuroglancer.*", "pandas.*", "panel.*"]
+module = ["cellpose.*", "janelia_pathlib.*", "neuroglancer.*", "pandas.*", "panel.*", "scipy.*"]
 ignore_missing_imports = true
 
 # https://coverage.readthedocs.io/en/latest/config.html

@@ -10,6 +10,7 @@ import numpy as np
 from cellpose_runner._config import CellposeConfig
 from cellpose_runner._paths import resolve_janelia_path
 from cellpose_runner._run import prepare_run, segment
+from cellpose_runner._views import consolidate, run_view, write_view
 
 LOG_FILENAME = "script.log"
 
@@ -59,6 +60,24 @@ def run_with_logging(
     return masks
 
 
+def _configure_logging(run_dir: Path, job_label: str) -> logging.Logger:
+    """Set up logging for one job, writing to its own `script.<job_label>.log`.
+
+    Each of the (up to) 4 jobs sharing a run directory (3 views + a
+    consolidation) gets its own log file rather than sharing `script.log` --
+    concurrent processes writing one file would interleave.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(run_dir / f"script.{job_label}.log"),
+        ],
+    )
+    return logging.getLogger(__name__)
+
+
 def _read_config(config_path: Path) -> tuple[CellposeConfig, dict, Path]:
     with config_path.open("rb") as f:
         toml = tomllib.load(f)
@@ -102,14 +121,15 @@ def resolve_run_dir(config_path: Path, slug: str) -> Path:
 
 
 def cli_main(load_volume: LoadVolume) -> None:
-    """A generic `prepare` / `segment` / `run` CLI for a one-off script.
+    """A generic `prepare` / `segment` / `run` / `run-view` / `consolidate` CLI.
 
     Everything here is dataset-agnostic except `load_volume`: a script writes
     that one function -- `(data_loader_table) -> volume` -- reading whatever
     it needs (a raw path, timepoint, channel index) from the config's
     `[data-loader]` table, and gets the rest (argument parsing, config
     loading, logging, calling into `cellpose_runner`) for free. One config
-    file fully describes one run, so nothing besides the config path is a CLI
+    file fully describes one run, so nothing besides the config path (and,
+    for `segment`/`run-view`/`consolidate`, the run directory) is a CLI
     argument.
 
     The config also needs a top-level `output_root`, since it's needed
@@ -119,6 +139,13 @@ def cli_main(load_volume: LoadVolume) -> None:
     script) can create the run directory -- and know its path, to point LSF's
     own logs at it -- before the GPU job that does the actual segmentation
     starts. `run` does both in one call, for the common local case.
+
+    `run-view`/`consolidate` split a `mode="three_d_flows"` run's 3
+    orthogonal-view GPU forward passes into independent jobs (see
+    `cellpose_runner._views`), so they can run in parallel on a cluster
+    rather than sequentially inside one `segment()` call. `consolidate`
+    never calls `load_volume` -- it only touches the persisted per-view zarr
+    arrays and `config.toml`.
 
     Args:
         load_volume: Loads a volume from the config's `[data-loader]` table.
@@ -136,11 +163,30 @@ def cli_main(load_volume: LoadVolume) -> None:
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("config_path", type=Path)
 
+    run_view_parser = subparsers.add_parser("run-view")
+    run_view_parser.add_argument("run_dir", type=Path)
+    run_view_parser.add_argument("view", choices=("YX", "ZY", "ZX"))
+    run_view_parser.add_argument("config_path", type=Path)
+
+    consolidate_parser = subparsers.add_parser("consolidate")
+    consolidate_parser.add_argument("run_dir", type=Path)
+    consolidate_parser.add_argument("config_path", type=Path)
+
     prepare_parser.set_defaults(command="prepare")
     segment_parser.set_defaults(command="segment")
     run_parser.set_defaults(command="run")
+    run_view_parser.set_defaults(command="run-view")
+    consolidate_parser.set_defaults(command="consolidate")
 
     args = parser.parse_args()
+
+    if args.command == "consolidate":
+        config, _data_loader, _output_root = _read_config(args.config_path)
+        logger = _configure_logging(args.run_dir, "consolidate")
+        masks = consolidate(args.run_dir, config)
+        logger.info("consolidated %s, %d labels", masks.shape, masks.max())
+        return
+
     config, data_loader, output_root = _read_config(args.config_path)
     volume = load_volume(data_loader)
 
@@ -153,17 +199,15 @@ def cli_main(load_volume: LoadVolume) -> None:
         run_dir = prepare_run(volume, config, output_root, extra_metadata=extra_metadata)
         print(run_dir)  # noqa: T201 -- the one line a caller needs to capture
     elif args.command == "segment":
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s %(name)s %(message)s",
-            handlers=[
-                logging.StreamHandler(),
-                logging.FileHandler(args.run_dir / LOG_FILENAME),
-            ],
-        )
-        logger = logging.getLogger(__name__)
+        logger = _configure_logging(args.run_dir, "segment")
         logger.info("running cellpose on volume %s %s", volume.shape, volume.dtype)
         masks = segment(args.run_dir, volume)
         logger.info("segmented %s, %d labels", masks.shape, masks.max())
+    elif args.command == "run-view":
+        logger = _configure_logging(args.run_dir, f"view-{args.view}")
+        logger.info("running %s view on volume %s %s", args.view, volume.shape, volume.dtype)
+        y, style = run_view(volume, config, args.view)
+        write_view(args.run_dir, args.view, y, style)
+        logger.info("wrote view %s", args.view)
     else:
         run_with_logging(volume, config, output_root, extra_metadata=extra_metadata)
