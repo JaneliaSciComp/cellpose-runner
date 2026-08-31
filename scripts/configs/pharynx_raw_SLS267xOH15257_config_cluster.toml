@@ -1,0 +1,16 @@
+output_root = "/nrs/shroff/malinmayorc/cellpose/SLS267xOH15257"
+lsf_project = "shroff"  # LSF billing project for scripts/submit_p4_cluster.sh
+
+[cellpose]
+do_3D = true
+anisotropy = 9.355  # Z spacing 0.5um / XY pixel size 0.
+flow_threshold = 0.4
+cellprob_threshold = -10.0
+flow3D_smooth = 2.0  # Gaussian sigma on the 3D flow field; 0 is no smoothing
+min_size = 200
+
+[cellpose.normalize]
+smooth_radius = 1.0
+
+[data-loader]
+raw_path = "/nrs/shroff/Pharynx_Project/Data/SLS267xOH15257/080626_Dataset_2/Raw_Data/488/t7.tif"
