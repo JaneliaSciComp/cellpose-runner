@@ -33,6 +33,20 @@ def _center_third(volume: np.ndarray) -> np.ndarray:
     return volume[slices]
 
 
+def _center_third_xy(volume: np.ndarray) -> np.ndarray:
+    """The middle third of `volume` along Y and X only, keeping the full Z stack.
+
+    Useful when the crop is meant to speed up in-plane parameter sweeps
+    without losing depth coverage (e.g. checking segmentation across the
+    whole Z extent of a smaller XY region).
+    """
+    _, y, x = volume.shape[:3]
+    slices = (slice(None), slice(y // 3, 2 * (y // 3)), slice(x // 3, 2 * (x // 3))) + (
+        slice(None),
+    ) * (volume.ndim - 3)
+    return volume[slices]
+
+
 def load_volume(data_loader: dict) -> np.ndarray:
     if "timepoint" in data_loader:
         return load_volume_raw(data_loader)
@@ -51,6 +65,8 @@ def load_volume_processed(data_loader: dict) -> np.ndarray:
     # keeps segmenting what it always did.
     if data_loader.get("center_third", False):
         mapped = _center_third(mapped)
+    elif data_loader.get("center_third_xy", False):
+        mapped = _center_third_xy(mapped)
     volume = np.asarray(mapped).astype(mapped.dtype.newbyteorder("="))
     return volume[..., None]  # ZYX -> ZYXC, single channel
 
@@ -74,6 +90,8 @@ def load_volume_raw(data_loader: dict) -> np.ndarray:
     # keeps segmenting what it always did.
     if data_loader.get("center_third", False):
         volume = _center_third(volume)
+    elif data_loader.get("center_third_xy", False):
+        volume = _center_third_xy(volume)
     return volume[..., None]  # ZYX -> ZYXC, single channel
 
 

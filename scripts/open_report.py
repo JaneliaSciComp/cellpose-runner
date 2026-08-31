@@ -5,8 +5,12 @@ column checkboxes need a live Python process to react to clicks, so this is
 served, not saved to a static file -- run it with `panel serve`, not `python`.
 
 Usage:
-    uv run --extra report panel serve scripts/open_report.py --show \
+    uv run --extra report panel serve scripts/open_report.py --show --port 0 \
         --args <config.toml | output_root>
+
+`--port 0` asks Bokeh/Tornado for any free port, so multiple reports (or other
+panel servers) can run concurrently instead of colliding on the fixed default
+of 5006.
 """
 
 import sys
