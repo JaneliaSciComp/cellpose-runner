@@ -2,7 +2,7 @@
 # Submit a mode="three_d_flows" cellpose_runner segmentation as 4 dependent LSF
 # jobs: 3 parallel per-view GPU forward passes, then 1 CPU-only consolidation.
 #
-# Usage: scripts/submit_p4_cluster_views.sh <config.toml>
+# Usage: scripts/submit_cluster_views.sh <config.toml>
 #
 # Splits do_3D's 3 orthogonal-view forward passes (see
 # cellpose_runner._views) across independent GPU jobs that run concurrently
@@ -30,7 +30,7 @@ CONSOLIDATE_SLOTS=4
 CONSOLIDATE_WALLTIME=1:00
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="$PKG_DIR/scripts/run_p4_timepoint.py"
+SCRIPT="$PKG_DIR/scripts/run_timepoint.py"
 
 # lsf_project lives in the config (top-level, alongside output_root) rather
 # than being hardcoded here, since the billing project is a property of the

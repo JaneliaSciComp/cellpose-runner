@@ -1,14 +1,14 @@
-"""Load one timepoint of the raw p4 nuclear channel and run cellpose_runner on it.
+"""Load one timepoint of a raw or processed volume and run cellpose_runner on it.
 
 Everything except `load_volume` below is generic -- see cellpose_runner.cli_main.
 One config file (with its own timepoint) fully describes one run.
 
 Usage:
-    uv run scripts/run_p4_timepoint.py prepare <config.toml>
-    uv run scripts/run_p4_timepoint.py segment <run_dir> <config.toml>
+    uv run scripts/run_timepoint.py prepare <config.toml>
+    uv run scripts/run_timepoint.py segment <run_dir> <config.toml>
 
     # or, for one call that does both, as on a laptop:
-    uv run scripts/run_p4_timepoint.py run <config.toml>
+    uv run scripts/run_timepoint.py run <config.toml>
 """
 
 from pathlib import Path

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Submit one cellpose_runner segmentation for a p4 timepoint as an LSF job.
+# Submit one cellpose_runner segmentation as an LSF job.
 #
-# Usage: scripts/submit_p4_cluster.sh <config.toml>
+# Usage: scripts/submit_cluster.sh <config.toml>
 #
 # One bsub job, no array, no sweep -- validates the cluster path for a single
 # run before anything more ambitious. See scratch/CLUSTER_DESIGN.md.
@@ -24,7 +24,7 @@ SLOTS=8         # gpu_l4 is 15GB/slot; observed local peak RSS is ~8GB, well und
 WALLTIME=4:00
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="$PKG_DIR/scripts/run_p4_timepoint.py"
+SCRIPT="$PKG_DIR/scripts/run_timepoint.py"
 
 # lsf_project lives in the config (top-level, alongside output_root) rather
 # than being hardcoded here, since the billing project is a property of the
