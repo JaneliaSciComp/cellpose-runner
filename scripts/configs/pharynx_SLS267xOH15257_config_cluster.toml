@@ -9,7 +9,7 @@ cellprob_threshold = -8.0
 flow3D_smooth = 2.0  # Gaussian sigma on the 3D flow field; 0 is no smoothing
 min_size = 200
 
-[cellpose.preprocess.normalize]
+[cellpose.normalize]
 smooth_radius = 2.0
 
 [data-loader]
