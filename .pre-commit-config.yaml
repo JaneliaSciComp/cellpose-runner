@@ -4,6 +4,9 @@ ci:
   autoupdate_commit_msg: "ci(pre-commit.ci): autoupdate"
   autofix_prs: false
 
+default_language_version:
+  python: python3.12
+
 repos:
   - repo: https://github.com/adhtruong/mirrors-typos
     rev: v1.45.0

@@ -32,6 +32,50 @@ class ModelConfig(BaseModel):
         return kwargs
 
 
+class CPDinoModelConfig(BaseModel):
+    """Parameters for the `CPDINO_3D(...)` constructor (`cellpose3d.utils3d`).
+
+    `three_d_dino` mode's own model config, standing in for `ModelConfig`,
+    since `CPDINO_3D` is not `CellposeModel` -- it wraps a DINO ViT patched
+    with a 3D-conv input stem, loaded from a standalone checkpoint file
+    rather than resolved from cellpose's own model cache by name.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Path to the trained CPDINO_3D checkpoint. Unlike ModelConfig.pretrained_model,
+    # this is not a cache-resolved name -- CPDINO_3D.load_model() takes an
+    # explicit file path, so there is no name-based default to fall back on.
+    model_path: str
+    gpu: bool = True
+    device: str | None = None
+    # Architecture knobs, matching CPDINO_3D's own constructor defaults.
+    model_name: str = "vitl"
+    nout: int = 3
+    ps: int = 8
+    conv_multi: bool = True
+    bsize: int = 256
+    rdrop: float = 0.4
+    # Z-window depth: how many consecutive slices the network sees per
+    # forward pass along whichever axis is "Z" in a given orthogonal view.
+    wsize: int = 25
+
+    def to_init_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for the `CPDINO_3D` constructor.
+
+        `device` resolves the same string-to-`torch.device` conversion as
+        `ModelConfig.to_init_kwargs`, falling back to `gpu` when unset.
+        """
+        import torch
+
+        kwargs = self.model_dump(exclude={"gpu"})
+        if kwargs["device"] is not None:
+            kwargs["device"] = torch.device(kwargs["device"])
+        else:
+            kwargs["device"] = torch.device("cuda" if self.gpu else "cpu")
+        return kwargs
+
+
 class NormalizeConfig(BaseModel):
     """Image normalization parameters, forming `eval()`'s `normalize` dict.
 
@@ -177,21 +221,68 @@ class ThreeDFlowsPostprocessConfig(PostprocessConfig):
     flow3D_smooth: float = 0.0
 
 
-_MODE_INFERENCE: dict[str, type[InferenceConfig]] = {
+class ThreeDDinoInferenceConfig(BaseModel):
+    """Parameters for `CPDINO_3D`'s per-view forward pass (`run_net_3d`).
+
+    Deliberately not a `PostprocessConfig`/`InferenceConfig` subclass: those
+    model `CellposeModel.eval()`'s parameters, none of which `eval_3d` takes.
+    `bsize`/`tile_overlap` here are `run_net_3d`'s own XY tiling, independent
+    of `CPDinoModelConfig.bsize` (that one sizes `CPDINO_3D`'s patch stem).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    batch_size: int = 8
+    bsize: int = 256
+    tile_overlap: float = 0.1
+
+
+class ThreeDDinoPostprocessConfig(BaseModel):
+    """Parameters for `eval_3d`'s flow-fusion and mask computation.
+
+    Deliberately not a `PostprocessConfig` subclass: `eval_3d` calls
+    `dynamics.compute_masks` with a hardcoded `niter=1000` and no
+    `min_size`/`max_size_fraction`, so those `PostprocessConfig` fields
+    would promise behavior this mode doesn't actually have.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cellprob_threshold: float = 0.0
+    # Gaussian sigma smoothing the fused 3D flow field before masks are
+    # computed. 0 is no smoothing. Named to match ThreeDFlowsPostprocessConfig's
+    # field of the same meaning, though the two modes compute their flow
+    # fields independently.
+    flow3D_smooth: float = 1.0
+
+
+_MODE_MODEL: dict[str, type[BaseModel]] = {
+    "two_d": ModelConfig,
+    "stitch": ModelConfig,
+    "three_d_flows": ModelConfig,
+    "three_d_dino": CPDinoModelConfig,
+}
+_MODE_INFERENCE: dict[str, type[BaseModel]] = {
     "two_d": InferenceConfig,
     "stitch": InferenceConfig,
     "three_d_flows": ThreeDFlowsInferenceConfig,
+    "three_d_dino": ThreeDDinoInferenceConfig,
 }
-_MODE_POSTPROCESS: dict[str, type[PostprocessConfig]] = {
+_MODE_POSTPROCESS: dict[str, type[BaseModel]] = {
     "two_d": PostprocessConfig,
     "stitch": StitchPostprocessConfig,
     "three_d_flows": ThreeDFlowsPostprocessConfig,
+    "three_d_dino": ThreeDDinoPostprocessConfig,
 }
 _MODE_TO_DO_3D: dict[str, bool] = {
     "two_d": False,
     "stitch": False,
     "three_d_flows": True,
+    "three_d_dino": True,
 }
+# Modes not built on CellposeModel at all -- model_kwargs()/eval_kwargs()
+# raise for these rather than returning kwargs for a call that never happens.
+_NON_CELLPOSE_MODEL_MODES = frozenset({"three_d_dino"})
 
 
 class CellposeConfig(BaseModel):
@@ -199,22 +290,28 @@ class CellposeConfig(BaseModel):
 
     Fields map onto `CellposeModel`'s constructor and its `eval()` method,
     except for `save_flows` and `save_styles`, which select what gets written
-    to the run directory. `mode` selects one of cellpose's three genuinely
-    different segmentation algorithms (2D, stitch, 3D-flows -- see
-    `scratch/config-reorg-plan.md`) and constrains which `inference`/
-    `postprocess` subclass pairs with it, so a mode-specific field (e.g.
-    `anisotropy`) can't be set for a mode it does nothing in.
+    to the run directory, and except for `mode="three_d_dino"`, which maps
+    onto `CPDINO_3D`/`eval_3d` (`cellpose3d`) instead -- a structurally
+    different model and call path, not a `CellposeModel.eval()` variant. Every
+    mode's `model`/`inference`/`postprocess` subclass triple is constrained
+    together, so a mode-specific field (e.g. `anisotropy`, or `three_d_dino`'s
+    `model_path`) can't be set for a mode it does nothing in.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["two_d", "stitch", "three_d_flows"] = "two_d"
-    model: ModelConfig = ModelConfig()
+    mode: Literal["two_d", "stitch", "three_d_flows", "three_d_dino"] = "two_d"
+    model: ModelConfig | CPDinoModelConfig = ModelConfig()
     preprocess: PreprocessConfig = PreprocessConfig()
-    inference: InferenceConfig | ThreeDFlowsInferenceConfig = InferenceConfig()
-    postprocess: PostprocessConfig | StitchPostprocessConfig | ThreeDFlowsPostprocessConfig = (
-        PostprocessConfig()
+    inference: InferenceConfig | ThreeDFlowsInferenceConfig | ThreeDDinoInferenceConfig = (
+        InferenceConfig()
     )
+    postprocess: (
+        PostprocessConfig
+        | StitchPostprocessConfig
+        | ThreeDFlowsPostprocessConfig
+        | ThreeDDinoPostprocessConfig
+    ) = PostprocessConfig()
 
     # Output selection
     save_flows: bool = False
@@ -223,7 +320,7 @@ class CellposeConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _parse_stage_configs_for_mode(cls, data: Any) -> Any:
-        """Parse `inference`/`postprocess` dicts against `mode`'s own subclass.
+        """Parse `model`/`inference`/`postprocess` dicts against `mode`'s own subclass.
 
         A dict lacking a mode-specific field (e.g. `anisotropy` omitted
         because `_without_nones` stripped it before writing TOML) still
@@ -236,6 +333,8 @@ class CellposeConfig(BaseModel):
         if not isinstance(data, dict) or "mode" not in data:
             return data
         mode = data["mode"]
+        if mode in _MODE_MODEL and isinstance(data.get("model", {}), dict):
+            data = {**data, "model": _MODE_MODEL[mode](**data.get("model", {}))}
         if mode in _MODE_INFERENCE and isinstance(data.get("inference", {}), dict):
             data = {**data, "inference": _MODE_INFERENCE[mode](**data.get("inference", {}))}
         if mode in _MODE_POSTPROCESS and isinstance(data.get("postprocess", {}), dict):
@@ -244,8 +343,14 @@ class CellposeConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_mode_matches_stage_configs(self) -> "CellposeConfig":
+        expected_model = _MODE_MODEL[self.mode]
         expected_inference = _MODE_INFERENCE[self.mode]
         expected_postprocess = _MODE_POSTPROCESS[self.mode]
+        if type(self.model) is not expected_model:
+            raise ValueError(
+                f"mode={self.mode!r} requires model={expected_model.__name__}, "
+                f"got {type(self.model).__name__}."
+            )
         if type(self.inference) is not expected_inference:
             raise ValueError(
                 f"mode={self.mode!r} requires inference={expected_inference.__name__}, "
@@ -259,7 +364,18 @@ class CellposeConfig(BaseModel):
         return self
 
     def model_kwargs(self) -> dict[str, Any]:
-        """Keyword arguments for the `CellposeModel` constructor."""
+        """Keyword arguments for the `CellposeModel` constructor.
+
+        Raises:
+            TypeError: If `mode` doesn't build a `CellposeModel` at all (e.g.
+                `three_d_dino`, which builds `CPDINO_3D` instead -- see
+                `cellpose3d`'s own model-building code for that mode).
+        """
+        if self.mode in _NON_CELLPOSE_MODEL_MODES:
+            raise TypeError(
+                f"mode={self.mode!r} does not build a CellposeModel; "
+                "there is no model_kwargs() for it."
+            )
         return self.model.to_init_kwargs()
 
     def eval_kwargs(self) -> dict[str, Any]:
@@ -269,7 +385,16 @@ class CellposeConfig(BaseModel):
         postprocess) unconditionally, then translates `mode` into cellpose's
         own `do_3D` flag at this boundary -- `mode` doesn't exist in
         cellpose's own API, so it is never passed through itself.
+
+        Raises:
+            TypeError: If `mode` doesn't call `CellposeModel.eval()` at all
+                (e.g. `three_d_dino`) -- see `model_kwargs()`.
         """
+        if self.mode in _NON_CELLPOSE_MODEL_MODES:
+            raise TypeError(
+                f"mode={self.mode!r} does not call CellposeModel.eval(); "
+                "there is no eval_kwargs() for it."
+            )
         kwargs = self.preprocess.to_eval_kwargs()
         kwargs.update(self.inference.model_dump())
         kwargs.update(self.postprocess.model_dump())

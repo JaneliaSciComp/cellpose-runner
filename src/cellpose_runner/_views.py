@@ -91,6 +91,10 @@ def run_view(
     # rather than via _build_model.
     model: Any = CellposeModel(**config.model_kwargs())
     inference = config.inference
+    if not isinstance(inference, ThreeDFlowsInferenceConfig):
+        raise TypeError(
+            f"view splitting is only meaningful for mode='three_d_flows', got {config.mode!r}"
+        )
     bsize = inference.bsize
     if bsize is None:
         bsize = 256 if model.backbone == "sam_vitl" else 384
@@ -175,6 +179,11 @@ def consolidate(run_dir: Path, config: CellposeConfig, cleanup: bool = True) -> 
         raise TypeError(
             f"view splitting is only meaningful for mode='three_d_flows', got {config.mode!r}"
         )
+    inference = config.inference
+    if not isinstance(inference, ThreeDFlowsInferenceConfig):
+        raise TypeError(
+            f"view splitting is only meaningful for mode='three_d_flows', got {config.mode!r}"
+        )
 
     logger.info("consolidating views for %s", run_dir)
 
@@ -203,7 +212,7 @@ def consolidate(run_dir: Path, config: CellposeConfig, cleanup: bool = True) -> 
     if diameter is not None and diameter > 0:
         rescale = 30.0 / diameter
 
-    resample = config.inference.resample
+    resample = inference.resample
     if resample and (rescale != 1.0 or original_shape[0] != yf.shape[0]):
         logger.info("resizing 3D flows and cellprob to original image size")
         yf = transforms.resize_image_3d(yf, original_shape, no_channels=False)

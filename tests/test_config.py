@@ -7,14 +7,20 @@ from pydantic import ValidationError
 
 from cellpose_runner import (
     CellposeConfig,
+    CPDinoModelConfig,
     ModelConfig,
     NormalizeConfig,
     StitchPostprocessConfig,
+    ThreeDDinoInferenceConfig,
+    ThreeDDinoPostprocessConfig,
     ThreeDFlowsInferenceConfig,
     ThreeDFlowsPostprocessConfig,
 )
 from cellpose_runner._config import PreprocessConfig
 
+# Modes whose eval_kwargs()/model_kwargs() call CellposeModel -- three_d_dino
+# builds CPDINO_3D instead, so it's excluded from every test below that pins
+# against CellposeModel's own signature or eval_kwargs()'s CellposeModel contract.
 _MODE_CONFIGS = {
     "two_d": CellposeConfig(),
     "stitch": CellposeConfig(
@@ -26,6 +32,13 @@ _MODE_CONFIGS = {
         postprocess=ThreeDFlowsPostprocessConfig(flow3D_smooth=1.0),
     ),
 }
+
+_three_d_dino_config = CellposeConfig(
+    mode="three_d_dino",
+    model=CPDinoModelConfig(model_path="/fake/cpdino3d.pt"),
+    inference=ThreeDDinoInferenceConfig(),
+    postprocess=ThreeDDinoPostprocessConfig(),
+)
 
 
 @pytest.mark.parametrize("config", _MODE_CONFIGS.values(), ids=_MODE_CONFIGS.keys())
@@ -121,3 +134,47 @@ def test_mismatched_mode_and_stage_config_is_rejected():
             inference=ThreeDFlowsInferenceConfig(anisotropy=2.0),
             postprocess=StitchPostprocessConfig(stitch_threshold=0.3),
         )
+
+
+def test_mismatched_mode_and_model_config_is_rejected():
+    # three_d_dino requires CPDinoModelConfig, not CellposeModel's ModelConfig
+    # -- the two aren't structurally compatible (no pretrained_model, but a
+    # required model_path).
+    with pytest.raises(ValidationError, match="mode"):
+        CellposeConfig(
+            mode="three_d_dino",
+            model=ModelConfig(),
+            inference=ThreeDDinoInferenceConfig(),
+            postprocess=ThreeDDinoPostprocessConfig(),
+        )
+
+
+def test_three_d_dino_requires_model_path():
+    # CPDinoModelConfig.model_path has no default -- unlike ModelConfig's
+    # pretrained_model, there is no cache-resolved name to fall back on.
+    with pytest.raises(ValidationError):
+        CPDinoModelConfig()
+
+
+def test_three_d_dino_eval_kwargs_not_supported():
+    # three_d_dino never calls CellposeModel.eval() -- eval_kwargs() must say
+    # so rather than silently returning kwargs for a call that never happens.
+    with pytest.raises(TypeError, match="three_d_dino"):
+        _three_d_dino_config.eval_kwargs()
+
+
+def test_three_d_dino_model_kwargs_not_supported():
+    with pytest.raises(TypeError, match="three_d_dino"):
+        _three_d_dino_config.model_kwargs()
+
+
+def test_cpdino_model_config_to_init_kwargs_converts_device_string():
+    config = CPDinoModelConfig(model_path="/fake/cpdino3d.pt", device="cpu")
+    assert config.to_init_kwargs()["device"] == torch.device("cpu")
+
+
+def test_cpdino_model_config_to_init_kwargs_falls_back_to_gpu():
+    config = CPDinoModelConfig(model_path="/fake/cpdino3d.pt", gpu=False)
+    assert config.to_init_kwargs()["device"] == torch.device("cpu")
+    config = CPDinoModelConfig(model_path="/fake/cpdino3d.pt", gpu=True)
+    assert config.to_init_kwargs()["device"] == torch.device("cuda")

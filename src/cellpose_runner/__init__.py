@@ -4,12 +4,15 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._config import (
     CellposeConfig,
+    CPDinoModelConfig,
     InferenceConfig,
     ModelConfig,
     NormalizeConfig,
     PostprocessConfig,
     PreprocessConfig,
     StitchPostprocessConfig,
+    ThreeDDinoInferenceConfig,
+    ThreeDDinoPostprocessConfig,
     ThreeDFlowsInferenceConfig,
     ThreeDFlowsPostprocessConfig,
 )
@@ -24,6 +27,7 @@ except PackageNotFoundError:  # package is not installed
     __version__ = "uninstalled"
 
 __all__ = [
+    "CPDinoModelConfig",
     "CellposeConfig",
     "InferenceConfig",
     "LoadVolume",
@@ -32,6 +36,8 @@ __all__ = [
     "PostprocessConfig",
     "PreprocessConfig",
     "StitchPostprocessConfig",
+    "ThreeDDinoInferenceConfig",
+    "ThreeDDinoPostprocessConfig",
     "ThreeDFlowsInferenceConfig",
     "ThreeDFlowsPostprocessConfig",
     "__version__",

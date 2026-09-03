@@ -38,10 +38,12 @@ dependencies = [
 
 [tool.uv.sources]
 janelia-pathlib = { git = "ssh://git@github.com/JaneliaSciComp/janelia-pathlib.git" }
+cellpose3d = { path = "../cellpose3D", editable = true }
 
 [project.optional-dependencies]
 report = ["pandas>=2,<3", "panel>=1.4,<2"]
 view = ["neuroglancer>=2.39,<3"]
+dino = ["cellpose3d"]
 
 [project.urls]
 homepage = "https://github.com/JaneliaSciComp/cellpose_runner"
@@ -137,7 +139,15 @@ pretty = true
 
 # cellpose ships no type information, so calls into it are untyped.
 [[tool.mypy.overrides]]
-module = ["cellpose.*", "janelia_pathlib.*", "neuroglancer.*", "pandas.*", "panel.*", "scipy.*"]
+module = [
+    "cellpose.*",
+    "cellpose3d.*",
+    "janelia_pathlib.*",
+    "neuroglancer.*",
+    "pandas.*",
+    "panel.*",
+    "scipy.*",
+]
 ignore_missing_imports = true
 
 # https://coverage.readthedocs.io/en/latest/config.html
