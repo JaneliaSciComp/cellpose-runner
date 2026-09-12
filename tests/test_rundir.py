@@ -23,15 +23,15 @@ def fixed_name(monkeypatch):
 @pytest.mark.parametrize(
     "name, expected",
     [
-        ("run", "20260807T152231_run"),
-        (None, "20260807T152231_stub-slug"),
+        ("run", "run_20260807T152231"),
+        (None, "stub-slug_20260807T152231"),
     ],
 )
-def test_run_dir_is_timestamp_then_name(tmp_path, fixed_name, name, expected):
+def test_run_dir_is_name_then_timestamp(tmp_path, fixed_name, name, expected):
     run_dir, run_name = create_run_dir(tmp_path, name=name)
     assert run_dir.name == expected
     assert run_dir.parent == tmp_path
-    assert run_dir.name.endswith(f"_{run_name}")
+    assert run_dir.name.startswith(f"{run_name}")
 
 
 def test_creates_missing_output_root(tmp_path):
