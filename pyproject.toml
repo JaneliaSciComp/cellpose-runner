@@ -147,6 +147,7 @@ module = [
     "pandas.*",
     "panel.*",
     "scipy.*",
+    "tqdm.*",
 ]
 ignore_missing_imports = true
 

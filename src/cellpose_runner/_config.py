@@ -33,20 +33,29 @@ class ModelConfig(BaseModel):
 
 
 class CPDinoModelConfig(BaseModel):
-    """Parameters for the `CPDINO_3D(...)` constructor (`cellpose3d.utils3d`).
+    """Parameters for building and loading a `CPDINO_3D` net (`cellpose3d.utils3d`).
 
     `three_d_dino` mode's own model config, standing in for `ModelConfig`,
     since `CPDINO_3D` is not `CellposeModel` -- it wraps a DINO ViT patched
-    with a 3D-conv input stem, loaded from a standalone checkpoint file
-    rather than resolved from cellpose's own model cache by name.
+    with a 3D-conv input stem. Loading is two separate calls, matching
+    `cellpose3d`'s own usage (see its `example_eval3d.ipynb`):
+    `CPDINO_3D(...)`'s own constructor loads the 2D backbone (`base_model_path`,
+    while its patch-embedding stem is still 2D); the 3D conv stem's own
+    trained weights load afterward, via a second `net.load_model(checkpoint_path,
+    device)` call once that stem has become the 3D module its checkpoint's
+    keys actually match.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    # Path to the trained CPDINO_3D checkpoint. Unlike ModelConfig.pretrained_model,
-    # this is not a cache-resolved name -- CPDINO_3D.load_model() takes an
-    # explicit file path, so there is no name-based default to fall back on.
-    model_path: str
+    # The retrained 3D checkpoint (backbone + 3D conv stem), loaded via a
+    # second net.load_model() call after construction. No cache-resolved
+    # name to fall back on -- this is always an explicit file path.
+    checkpoint_path: str
+    # The 2D backbone, loaded by CPDINO_3D's own constructor while its
+    # patch-embedding stem is still 2D. None resolves to cellpose's own
+    # cached `cpdino` base model, matching CPDINO_3D's own default.
+    base_model_path: str | None = None
     gpu: bool = True
     device: str | None = None
     # Architecture knobs, matching CPDINO_3D's own constructor defaults.
@@ -63,12 +72,15 @@ class CPDinoModelConfig(BaseModel):
     def to_init_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for the `CPDINO_3D` constructor.
 
-        `device` resolves the same string-to-`torch.device` conversion as
-        `ModelConfig.to_init_kwargs`, falling back to `gpu` when unset.
+        Excludes `checkpoint_path`, which isn't a constructor argument -- see
+        this class's own docstring. `device` resolves the same
+        string-to-`torch.device` conversion as `ModelConfig.to_init_kwargs`,
+        falling back to `gpu` when unset.
         """
         import torch
 
-        kwargs = self.model_dump(exclude={"gpu"})
+        kwargs = self.model_dump(exclude={"gpu", "checkpoint_path"})
+        kwargs["model_path"] = kwargs.pop("base_model_path")
         if kwargs["device"] is not None:
             kwargs["device"] = torch.device(kwargs["device"])
         else:
@@ -235,20 +247,29 @@ class ThreeDDinoInferenceConfig(BaseModel):
     batch_size: int = 8
     bsize: int = 256
     tile_overlap: float = 0.1
+    # e.g. 2.0 when Z is sampled half as densely as X or Y. None applies no
+    # rescaling. Unlike upstream cellpose3d's eval_3d, which resizes Z by the
+    # same diameter-derived scale as XY with no anisotropy correction at all,
+    # this field lets Z be rescaled independently before the forward pass --
+    # same semantics and formula as ThreeDFlowsInferenceConfig.anisotropy.
+    anisotropy: float | None = None
 
 
-class ThreeDDinoPostprocessConfig(BaseModel):
-    """Parameters for `eval_3d`'s flow-fusion and mask computation.
+class ThreeDDinoPostprocessConfig(PostprocessConfig):
+    """`PostprocessConfig` for the `three_d_dino` mode, adding its one postprocessing field.
 
-    Deliberately not a `PostprocessConfig` subclass: `eval_3d` calls
-    `dynamics.compute_masks` with a hardcoded `niter=1000` and no
-    `min_size`/`max_size_fraction`, so those `PostprocessConfig` fields
-    would promise behavior this mode doesn't actually have.
+    `min_size`/`max_size_fraction`/`niter` are inherited from `PostprocessConfig`
+    unchanged -- upstream `eval_3d` calls `dynamics.compute_masks` with those
+    hardcoded (no `min_size`/`max_size_fraction` at all, `niter=1000`), but
+    nothing about `compute_masks` itself makes them DINO-specific (see
+    `_view_consolidate.consolidate`'s `dino=True` path), so `niter`'s default
+    here is `1000` to match `eval_3d`'s own hardcoded value rather than
+    `PostprocessConfig`'s `None`. `flow_threshold` is inherited too but is a
+    no-op in 3D regardless of mode -- `dynamics.compute_masks` only applies it
+    when `do_3D=False`.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    cellprob_threshold: float = 0.0
+    niter: int | None = 1000
     # Gaussian sigma smoothing the fused 3D flow field before masks are
     # computed. 0 is no smoothing. Named to match ThreeDFlowsPostprocessConfig's
     # field of the same meaning, though the two modes compute their flow
@@ -295,7 +316,7 @@ class CellposeConfig(BaseModel):
     different model and call path, not a `CellposeModel.eval()` variant. Every
     mode's `model`/`inference`/`postprocess` subclass triple is constrained
     together, so a mode-specific field (e.g. `anisotropy`, or `three_d_dino`'s
-    `model_path`) can't be set for a mode it does nothing in.
+    `checkpoint_path`) can't be set for a mode it does nothing in.
     """
 
     model_config = ConfigDict(extra="forbid")

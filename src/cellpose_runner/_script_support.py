@@ -7,10 +7,10 @@ from typing import Any
 
 import numpy as np
 
+from cellpose_runner import _dino_views, _views
 from cellpose_runner._config import CellposeConfig
 from cellpose_runner._paths import resolve_janelia_path
 from cellpose_runner._run import prepare_run, segment
-from cellpose_runner._views import consolidate, run_view, write_view
 
 LOG_FILENAME = "script.log"
 
@@ -149,12 +149,13 @@ def cli_main(load_volume: LoadVolume) -> None:
     own logs at it -- before the GPU job that does the actual segmentation
     starts. `run` does both in one call, for the common local case.
 
-    `run-view`/`consolidate` split a `mode="three_d_flows"` run's 3
-    orthogonal-view GPU forward passes into independent jobs (see
-    `cellpose_runner._views`), so they can run in parallel on a cluster
-    rather than sequentially inside one `segment()` call. `consolidate`
-    never calls `load_volume` -- it only touches the persisted per-view zarr
-    arrays and `config.toml`.
+    `run-view`/`consolidate` split a `mode="three_d_flows"` or
+    `mode="three_d_dino"` run's 3 orthogonal-view GPU forward passes into
+    independent jobs (see `cellpose_runner._views`/`cellpose_runner._dino_views`),
+    so they can run in parallel on a cluster rather than sequentially inside
+    one `segment()` call -- dispatched between the two implementations by
+    `config.mode`. `consolidate` never calls `load_volume` -- it only touches
+    the persisted per-view zarr arrays and `config.toml`.
 
     Args:
         load_volume: Loads a volume from the config's `[data-loader]` table.
@@ -192,7 +193,10 @@ def cli_main(load_volume: LoadVolume) -> None:
     if args.command == "consolidate":
         config, _data_loader, _output_root = _read_config(args.config_path)
         logger = _configure_logging(args.run_dir, "consolidate")
-        masks = consolidate(args.run_dir, config)
+        consolidate_fn = (
+            _dino_views.consolidate if config.mode == "three_d_dino" else _views.consolidate
+        )
+        masks = consolidate_fn(args.run_dir, config)
         logger.info("consolidated %s, %d labels", masks.shape, masks.max())
         return
 
@@ -215,8 +219,12 @@ def cli_main(load_volume: LoadVolume) -> None:
     elif args.command == "run-view":
         logger = _configure_logging(args.run_dir, f"view-{args.view}")
         logger.info("running %s view on volume %s %s", args.view, volume.shape, volume.dtype)
-        y, style = run_view(volume, config, args.view)
-        write_view(args.run_dir, args.view, y, style)
+        if config.mode == "three_d_dino":
+            y = _dino_views.run_view(volume, config, args.view)
+            _dino_views.write_view(args.run_dir, args.view, y)
+        else:
+            y, style = _views.run_view(volume, config, args.view)
+            _views.write_view(args.run_dir, args.view, y, style)
         logger.info("wrote view %s", args.view)
     else:
         run_with_logging(volume, config, output_root, extra_metadata=extra_metadata)

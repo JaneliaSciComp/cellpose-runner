@@ -80,6 +80,23 @@ def _write_full_config(config_path, output_root):
         )
 
 
+def _write_full_dino_config(config_path, output_root):
+    with config_path.open("wb") as f:
+        tomli_w.dump(
+            {
+                "output_root": str(output_root),
+                "cellpose": {
+                    "mode": "three_d_dino",
+                    "model": {"checkpoint_path": "/fake/cpdino3d.pt"},
+                    "inference": {},
+                    "postprocess": {},
+                },
+                "data-loader": {},
+            },
+            f,
+        )
+
+
 def test_cli_run_view_calls_run_view_and_write_view(tmp_path, monkeypatch):
     volume = np.zeros((4, 8, 8, 1), dtype=np.uint16)
     run_dir = prepare_run(volume, CellposeConfig(), tmp_path, name="agile-seahorse")
@@ -95,8 +112,8 @@ def test_cli_run_view_calls_run_view_and_write_view(tmp_path, monkeypatch):
     def fake_write_view(passed_run_dir, view, y, style):
         calls["write_view"] = (passed_run_dir, view)
 
-    monkeypatch.setattr("cellpose_runner._script_support.run_view", fake_run_view)
-    monkeypatch.setattr("cellpose_runner._script_support.write_view", fake_write_view)
+    monkeypatch.setattr("cellpose_runner._views.run_view", fake_run_view)
+    monkeypatch.setattr("cellpose_runner._views.write_view", fake_write_view)
     monkeypatch.setattr("sys.argv", ["prog", "run-view", str(run_dir), "YX", str(config_path)])
 
     cli_main(lambda _data_loader: volume)
@@ -121,9 +138,59 @@ def test_cli_consolidate_does_not_call_load_volume(tmp_path, monkeypatch):
         assert passed_run_dir == run_dir
         return np.zeros((4, 8, 8), dtype=np.uint8)
 
-    monkeypatch.setattr("cellpose_runner._script_support.consolidate", fake_consolidate)
+    monkeypatch.setattr("cellpose_runner._views.consolidate", fake_consolidate)
     monkeypatch.setattr("sys.argv", ["prog", "consolidate", str(run_dir), str(config_path)])
 
     cli_main(fake_load_volume)
 
     assert load_volume_calls == []
+
+
+def test_cli_run_view_dispatches_to_dino_views_for_three_d_dino_mode(tmp_path, monkeypatch):
+    volume = np.zeros((4, 8, 8, 1), dtype=np.uint16)
+    run_dir = prepare_run(volume, CellposeConfig(), tmp_path, name="agile-seahorse")
+    config_path = tmp_path / "config.toml"
+    _write_full_dino_config(config_path, tmp_path)
+
+    calls = {}
+
+    def fake_run_view(passed_volume, config, view):
+        calls["run_view"] = (passed_volume, view)
+        return np.zeros((1,))
+
+    def fake_write_view(passed_run_dir, view, y):
+        calls["write_view"] = (passed_run_dir, view)
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("three_d_dino mode must not dispatch to _views")
+
+    monkeypatch.setattr("cellpose_runner._dino_views.run_view", fake_run_view)
+    monkeypatch.setattr("cellpose_runner._dino_views.write_view", fake_write_view)
+    monkeypatch.setattr("cellpose_runner._views.run_view", fail_if_called)
+    monkeypatch.setattr("cellpose_runner._views.write_view", fail_if_called)
+    monkeypatch.setattr("sys.argv", ["prog", "run-view", str(run_dir), "YX", str(config_path)])
+
+    cli_main(lambda _data_loader: volume)
+
+    assert calls["run_view"][1] == "YX"
+    assert calls["write_view"] == (run_dir, "YX")
+
+
+def test_cli_consolidate_dispatches_to_dino_views_for_three_d_dino_mode(tmp_path, monkeypatch):
+    volume = np.zeros((4, 8, 8, 1), dtype=np.uint16)
+    run_dir = prepare_run(volume, CellposeConfig(), tmp_path, name="agile-seahorse")
+    config_path = tmp_path / "config.toml"
+    _write_full_dino_config(config_path, tmp_path)
+
+    def fake_consolidate(passed_run_dir, config):
+        assert passed_run_dir == run_dir
+        return np.zeros((4, 8, 8), dtype=np.uint8)
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("three_d_dino mode must not dispatch to _views")
+
+    monkeypatch.setattr("cellpose_runner._dino_views.consolidate", fake_consolidate)
+    monkeypatch.setattr("cellpose_runner._views.consolidate", fail_if_called)
+    monkeypatch.setattr("sys.argv", ["prog", "consolidate", str(run_dir), str(config_path)])
+
+    cli_main(lambda _data_loader: volume)

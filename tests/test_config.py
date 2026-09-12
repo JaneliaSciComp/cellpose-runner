@@ -35,7 +35,7 @@ _MODE_CONFIGS = {
 
 _three_d_dino_config = CellposeConfig(
     mode="three_d_dino",
-    model=CPDinoModelConfig(model_path="/fake/cpdino3d.pt"),
+    model=CPDinoModelConfig(checkpoint_path="/fake/cpdino3d.pt"),
     inference=ThreeDDinoInferenceConfig(),
     postprocess=ThreeDDinoPostprocessConfig(),
 )
@@ -139,7 +139,7 @@ def test_mismatched_mode_and_stage_config_is_rejected():
 def test_mismatched_mode_and_model_config_is_rejected():
     # three_d_dino requires CPDinoModelConfig, not CellposeModel's ModelConfig
     # -- the two aren't structurally compatible (no pretrained_model, but a
-    # required model_path).
+    # required checkpoint_path).
     with pytest.raises(ValidationError, match="mode"):
         CellposeConfig(
             mode="three_d_dino",
@@ -149,8 +149,8 @@ def test_mismatched_mode_and_model_config_is_rejected():
         )
 
 
-def test_three_d_dino_requires_model_path():
-    # CPDinoModelConfig.model_path has no default -- unlike ModelConfig's
+def test_three_d_dino_requires_checkpoint_path():
+    # CPDinoModelConfig.checkpoint_path has no default -- unlike ModelConfig's
     # pretrained_model, there is no cache-resolved name to fall back on.
     with pytest.raises(ValidationError):
         CPDinoModelConfig()
@@ -168,13 +168,27 @@ def test_three_d_dino_model_kwargs_not_supported():
         _three_d_dino_config.model_kwargs()
 
 
+def test_cpdino_model_config_to_init_kwargs_excludes_checkpoint_path():
+    # checkpoint_path isn't a CPDINO_3D constructor argument -- it's loaded
+    # separately, via a second load_model() call (see _dino_views._build_net).
+    config = CPDinoModelConfig(checkpoint_path="/fake/cpdino3d.pt")
+    assert "checkpoint_path" not in config.to_init_kwargs()
+
+
 def test_cpdino_model_config_to_init_kwargs_converts_device_string():
-    config = CPDinoModelConfig(model_path="/fake/cpdino3d.pt", device="cpu")
+    config = CPDinoModelConfig(checkpoint_path="/fake/cpdino3d.pt", device="cpu")
     assert config.to_init_kwargs()["device"] == torch.device("cpu")
 
 
 def test_cpdino_model_config_to_init_kwargs_falls_back_to_gpu():
-    config = CPDinoModelConfig(model_path="/fake/cpdino3d.pt", gpu=False)
+    config = CPDinoModelConfig(checkpoint_path="/fake/cpdino3d.pt", gpu=False)
     assert config.to_init_kwargs()["device"] == torch.device("cpu")
-    config = CPDinoModelConfig(model_path="/fake/cpdino3d.pt", gpu=True)
+    config = CPDinoModelConfig(checkpoint_path="/fake/cpdino3d.pt", gpu=True)
     assert config.to_init_kwargs()["device"] == torch.device("cuda")
+
+
+def test_cpdino_model_config_to_init_kwargs_passes_base_model_path_as_model_path():
+    # CPDINO_3D's constructor param is still named model_path (it's the 2D
+    # backbone) -- base_model_path is this config's own, more specific name.
+    config = CPDinoModelConfig(checkpoint_path="/fake/cpdino3d.pt", base_model_path="/fake/base.pt")
+    assert config.to_init_kwargs()["model_path"] == "/fake/base.pt"
