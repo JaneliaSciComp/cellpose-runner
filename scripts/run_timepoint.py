@@ -57,6 +57,7 @@ def load_volume(data_loader: dict) -> np.ndarray:
 def load_volume_processed(data_loader: dict) -> np.ndarray:
     raw_path = resolve_janelia_path(Path(data_loader["raw_path"]))
     mapped = tifffile.memmap(raw_path)
+    nuclear_channel = data_loader.get("nuclear_channel")
 
     # Crop the memmap before materializing it: the upsampled file is ~4.5GB
     # over SMB, of which a center_third run reads ~1/27th. Slicing first means
@@ -67,7 +68,10 @@ def load_volume_processed(data_loader: dict) -> np.ndarray:
         mapped = _center_third(mapped)
     elif data_loader.get("center_third_xy", False):
         mapped = _center_third_xy(mapped)
-    volume = np.asarray(mapped).astype(mapped.dtype.newbyteorder("="))
+    if nuclear_channel:
+        volume = mapped[:, nuclear_channel].astype(mapped.dtype.newbyteorder("="))
+    else:
+        volume = np.asarray(mapped).astype(mapped.dtype.newbyteorder("="))
     return volume[..., None]  # ZYX -> ZYXC, single channel
 
 
