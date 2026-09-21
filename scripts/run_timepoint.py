@@ -48,46 +48,25 @@ def _center_third_xy(volume: np.ndarray) -> np.ndarray:
 
 
 def load_volume(data_loader: dict) -> np.ndarray:
-    if "timepoint" in data_loader:
-        return load_volume_raw(data_loader)
-    else:
-        return load_volume_processed(data_loader)
-
-
-def load_volume_processed(data_loader: dict) -> np.ndarray:
-    raw_path = resolve_janelia_path(Path(data_loader["raw_path"]))
-    mapped = tifffile.memmap(raw_path)
-    nuclear_channel = data_loader.get("nuclear_channel")
-    if nuclear_channel:
-        volume = mapped[nuclear_channel].astype(mapped.dtype.newbyteorder("="))
-
-    # Crop the memmap before materializing it: the upsampled file is ~4.5GB
-    # over SMB, of which a center_third run reads ~1/27th. Slicing first means
-    # only the bytes actually wanted cross the network.
-    # Defaults to the full volume, so an existing config without this key
-    # keeps segmenting what it always did.
-    if data_loader.get("center_third", False):
-        volume = _center_third(volume)
-    elif data_loader.get("center_third_xy", False):
-        volume = _center_third_xy(volume)
-    return volume[..., None]  # ZYX -> ZYXC, single channel
-
-
-def load_volume_raw(data_loader: dict) -> np.ndarray:
     # raw_path is recorded as whichever OS wrote the config (e.g. the
     # cluster's /groups/... form); translate it to this machine's own form
     # (e.g. /Volumes/... on a Mac) rather than assuming it's already correct.
     raw_path = resolve_janelia_path(Path(data_loader["raw_path"]))
-    timepoint = data_loader["timepoint"]
-    nuclear_channel = data_loader["nuclear_channel"]
 
     # memmap rather than imread: this ImageJ hyperstack is one contiguous page,
-    # so imread would decode the whole 5GB file before we slice one timepoint.
+    # so imread would decode the whole file before we slice one timepoint.
     # memmap is lazy, so this is cheap even when only shape/dtype are needed
     # (as in `prepare`) -- no pixel data is read until the array is used.
     mapped = tifffile.memmap(raw_path)
-    volume = mapped[timepoint, :, nuclear_channel].astype(mapped.dtype.newbyteorder("="))
 
+    timepoint = data_loader.get("timepoint")
+    nuclear_channel = data_loader.get("nuclear_channel")
+    index = tuple(i for i in (timepoint, slice(None), nuclear_channel) if i is not None)
+    volume = mapped[index].astype(mapped.dtype.newbyteorder("="))
+
+    # Crop the memmap before materializing it: the upsampled file is ~4.5GB
+    # over SMB, of which a center_third run reads ~1/27th. Slicing first means
+    # only the bytes actually wanted cross the network.
     # Defaults to the full volume, so an existing config without this key
     # keeps segmenting what it always did.
     if data_loader.get("center_third", False):
